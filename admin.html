@@ -8,81 +8,30 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
   <style>
-    /* iPhone 6でも操作しやすい専用デザイン */
-    body { 
-      margin: 0; 
-      background-color: #f0f0f0; 
-      font-family: "Hiragino Sans", sans-serif; 
-      display: flex; 
-      flex-direction: column; 
-      align-items: center; 
-      padding: 20px; 
-    }
+    body { margin: 0; background-color: #f0f0f0; font-family: "Hiragino Sans", sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+    h1 { font-size: 1.2rem; color: #333; margin-bottom: 10px; }
 
-    h1 { font-size: 1.2rem; color: #333; margin-bottom: 15px; }
+    /* ステータス表示 */
+    #status-display { width: 95%; background: white; padding: 10px; border-radius: 12px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    #status-label { font-size: 12px; color: #666; }
+    #status-text { font-weight: bold; font-size: 1.1rem; color: #333; }
 
-    /* 現在子機に何が出ているかを表示するパネル */
-    #status-display { 
-      width: 90%; 
-      background: white; 
-      padding: 15px; 
-      border-radius: 12px; 
-      text-align: center; 
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
-      margin-bottom: 25px; 
-    }
-    
-    #status-label { font-size: 14px; color: #666; margin-bottom: 5px; }
-    #status-text { font-weight: bold; font-size: 1.4rem; color: #333; }
+    /* 入力フォームエリア */
+    #message-form { width: 95%; background: #fff; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; box-sizing: border-box; }
+    input[type="text"] { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; margin-bottom: 10px; }
+    .btn-send { width: 100%; background: #444; color: white; padding: 12px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px #222; }
+    .btn-send:active { box-shadow: 0 0 #222; transform: translateY(4px); }
 
-    /* ボタンの配置（2列のグリッド） */
-    .grid { 
-      display: grid; 
-      grid-template-columns: 1fr 1fr; 
-      gap: 15px; 
-      width: 100%; 
-      max-width: 400px; 
-    }
+    /* 固定ボタンエリア */
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; max-width: 400px; }
+    button.fixed-btn { padding: 20px 10px; font-size: 1.1rem; font-weight: bold; border: none; border-radius: 15px; color: white; box-shadow: 0 4px #999; cursor: pointer; }
+    button.fixed-btn:active { box-shadow: 0 0 #999; transform: translateY(4px); }
 
-    button { 
-      padding: 25px 10px; 
-      font-size: 1.2rem; 
-      font-weight: bold; 
-      border: none; 
-      border-radius: 15px; 
-      color: white; 
-      box-shadow: 0 4px #999; 
-      cursor: pointer;
-      transition: 0.1s;
-    }
+    .btn-gohan { background-color: #ce0000; }
+    .btn-ofuro { background-color: #2196F3; }
+    .btn-reset { background-color: #888; grid-column: 1 / 3; margin-top: 5px; }
 
-    /* ボタンを押した時の動き */
-    button:active { 
-      box-shadow: 0 0 #999; 
-      transform: translateY(4px); 
-    }
-
-    /* ボタンの色設定 */
-    .btn-gohan { background-color: #ce0000; } /* 子機の赤色に合わせました */
-    .btn-ofuro { background-color: #2196F3; } /* 子機の青色に合わせました */
-    .btn-reset { 
-      background-color: #888; 
-      grid-column: 1 / 3; 
-      margin-top: 10px; 
-      font-size: 1rem;
-    }
-
-    /* 明日のカメラ機能用スペース */
-    #camera-area {
-      margin-top: 30px;
-      width: 100%;
-      padding: 20px;
-      border: 2px dashed #bbb;
-      border-radius: 15px;
-      color: #888;
-      text-align: center;
-      font-size: 14px;
-    }
+    #camera-area { margin-top: 20px; width: 100%; padding: 15px; border: 2px dashed #bbb; border-radius: 15px; color: #888; text-align: center; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -94,18 +43,20 @@
     <div id="status-text">確認中...</div>
   </div>
 
-  <div class="grid">
-    <button class="btn-gohan" onclick="updateDb('ごはん')">ごはん</button>
-    <button class="btn-ofuro" onclick="updateDb('お風呂')">お風呂</button>
-    <button class="btn-reset" onclick="updateDb('通常')">時計に戻す</button>
+  <div id="message-form">
+    <input type="text" id="custom-message" placeholder="お知らせを入力（例：買い物中）">
+    <button class="btn-send" onclick="sendCustomMessage()">お知らせを送信</button>
   </div>
 
-  <div id="camera-area">
-    📸 カメラ機能（明日実装予定）
+  <div class="grid">
+    <button class="fixed-btn btn-gohan" onclick="updateDb('ごはん')">ごはん</button>
+    <button class="fixed-btn btn-ofuro" onclick="updateDb('お風呂')">お風呂</button>
+    <button class="fixed-btn btn-reset" onclick="updateDb('通常')">時計に戻す</button>
   </div>
+
+  <div id="camera-area">📸 カメラ機能（明日実装予定）</div>
 
   <script>
-    // Firebase設定
     const firebaseConfig = {
       apiKey: "AIzaSyAP10nWUJqwlv-9yNtbMB6iBsawb44wn2A",
       databaseURL: "https://info-pane-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -114,20 +65,39 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database().ref('currentStatus');
 
-    // 子機にデータを送る関数
+    // 固定ボタン用（ごはん・お風呂・通常）
     function updateDb(status) {
-      db.set({ mode: status, time: Date.now() });
+      db.set({ mode: status, time: Date.now(), date: "" });
     }
 
-    // 子機の今の状態をリアルタイムに受け取って表示を変える
+    // 自由入力フォーム用
+    function sendCustomMessage() {
+      const input = document.getElementById('custom-message');
+      const text = input.value.trim();
+      
+      if (text === "") return; // 空っぽなら送らない
+
+      // 現在の日付と時刻を作成 (例: 3/1 19:30)
+      const now = new Date();
+      const dateStr = (now.getMonth() + 1) + "/" + now.getDate() + " " + 
+                      now.getHours() + ":" + String(now.getMinutes()).padStart(2, '0');
+
+      // 送信
+      db.set({ 
+        mode: text, 
+        time: Date.now(),
+        date: dateStr 
+      });
+
+      input.value = ""; // 送信後に空にする
+    }
+
+    // ステータス監視
     db.on('value', (snap) => {
       const data = snap.val();
       const statusText = document.getElementById('status-text');
-      
       if (data) {
         statusText.innerText = data.mode;
-        
-        // 状態に合わせて文字色を変える
         if (data.mode === 'ごはん') statusText.style.color = "#ce0000";
         else if (data.mode === 'お風呂') statusText.style.color = "#2196F3";
         else statusText.style.color = "#333";
