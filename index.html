@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>家族インフォメーション</title>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <style>
+    /* 画面のデザイン */
+    body { margin: 0; background-color: black; color: white; font-family: "Hiragino Sans", sans-serif; transition: 0.5s; overflow: hidden; }
+    #panel { height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+    
+    /* 文字の大きさ */
+    #clock { font-size: 15vw; font-weight: bold; }
+    #message { font-size: 6vw; color: #FFD700; margin-top: 20px; }
+    
+    /* 「ごはん」の時の特別な色 */
+    .alert-style { background-color: #ce0000 !important; }
+    .alert-style #clock { display: none; } /* ごはんの時は時計を隠す */
+    .alert-style #message { font-size: 18vw; color: white; }
+
+    /* 夜間モード：画面を真っ暗にする */
+    .night-mode { background-color: black !important; visibility: hidden; }
+
+    /* 親機（iPhone）用ボタンのデザイン */
+    .admin-area { display: none; padding: 20px; grid-template-columns: 1fr 1fr; gap: 10px; }
+    button { padding: 30px; font-size: 20px; border-radius: 10px; border: none; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div id="panel">
+    <div id="clock">00:00</div>
+    <div id="message">おしらせ</div>
+  </div>
+
+  <div id="admin" class="admin-area">
+    <button onclick="updateDb('ごはん')" style="background:#4CAF50;">ごはん</button>
+    <button onclick="updateDb('お風呂')" style="background:#2196F3;">お風呂</button>
+    <button onclick="updateDb('通常')" style="background:#888;">通常に戻す</button>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAP10nWUJqwlv-9yNtbMB6iBsawb44wn2A",
+      databaseURL: "https://info-pane-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "info-pane"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database().ref('currentStatus');
+
+    // 親機か子機か判定（URLの最後に ?master を付けると親機になります）
+    const isMaster = window.location.search.includes('master');
+    if (isMaster) {
+      document.getElementById('panel').style.display = 'none';
+      document.getElementById('admin').style.display = 'grid';
+    }
+
+    // 1秒ごとに時計と夜間判定を更新
+    function update() {
+      const now = new Date();
+      const h = now.getHours();
+      const m = String(now.getMinutes()).padStart(2, '0');
+      document.getElementById('clock').innerText = `${h}:${m}`;
+
+      // 毎日21時から朝7時までは「夜間モード」
+      if (h >= 21 || h < 7) {
+        document.body.classList.add('night-mode');
+      } else {
+        document.body.classList.remove('night-mode');
+      }
+    }
+    setInterval(update, 1000);
+
+    // 親機からデータを送る
+    function updateDb(status) {
+      db.set({ mode: status, time: Date.now() });
+    }
+
+    // 子機がデータを受け取って画面を変える
+    db.on('value', (snap) => {
+      const data = snap.val();
+      if (!data) return;
+
+      const body = document.body;
+      const msg = document.getElementById('message');
+
+      if (data.mode === 'ごはん') {
+        body.classList.add('alert-style');
+        msg.innerText = "ごはんです";
+        say("ごはんの時間です");
+      } else if (data.mode === 'お風呂') {
+        body.classList.remove('alert-style');
+        msg.innerText = "お風呂です";
+        say("お風呂の時間です");
+      } else {
+        body.classList.remove('alert-style');
+        msg.innerText = "おしらせはありません";
+      }
+    });
+
+    // 声で読み上げる機能
+    function say(text) {
+      const uttr = new SpeechSynthesisUtterance(text);
+      uttr.lang = "ja-JP";
+      window.speechSynthesis.speak(uttr);
+    }
+  </script>
+</body>
+</html>
