@@ -7,25 +7,38 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
   <style>
-    /* 画面のデザイン */
-    body { margin: 0; background-color: black; color: white; font-family: "Hiragino Sans", sans-serif; transition: 0.5s; overflow: hidden; }
+    /* 1. 背景を白、文字を黒に変更 */
+    body { margin: 0; background-color: white; color: black; font-family: "Helvetica Neue", "Arial", "Hiragino Sans", "Meiryo", sans-serif; transition: 0.5s; overflow: hidden; }
     #panel { height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
     
-    /* 文字の大きさ */
-    #clock { font-size: 15vw; font-weight: bold; }
-    #message { font-size: 6vw; color: #FFD700; margin-top: 20px; }
+    /* 2. 時計のデザイン（黒・太字） */
+    #clock { font-size: 12vw; font-weight: 900; color: #333; }
     
-    /* 「ごはん」の時の特別な色 */
-    .alert-style { background-color: #ce0000 !important; }
-    .alert-style #clock { display: none; } /* ごはんの時は時計を隠す */
-    .alert-style #message { font-size: 18vw; color: white; }
+    /* 3. お知らせのデザイン（もっと大きく、黒・太字） */
+    #message { 
+      font-size: 8vw; 
+      font-weight: 900; 
+      color: black; 
+      margin-top: 10px;
+      padding: 0 20px;
+      line-height: 1.2;
+    }
+    
+    /* 4. 「ごはん」の時（白背景のまま、文字を巨大にする場合） */
+    .alert-style { background-color: white !important; }
+    .alert-style #clock { display: none; } 
+    .alert-style #message { 
+      font-size: 20vw; 
+      color: #d32f2f; /* ここだけ目立つように赤にするのもアリです。黒が良ければ #000 に */
+      font-weight: 900; 
+    }
 
-    /* 夜間モード：画面を真っ暗にする */
+    /* 夜間モード：21時になったら真っ暗にする */
     .night-mode { background-color: black !important; visibility: hidden; }
 
-    /* 親機（iPhone）用ボタンのデザイン */
+    /* 親機用ボタン */
     .admin-area { display: none; padding: 20px; grid-template-columns: 1fr 1fr; gap: 10px; }
-    button { padding: 30px; font-size: 20px; border-radius: 10px; border: none; font-weight: bold; }
+    button { padding: 30px; font-size: 20px; border-radius: 10px; border: none; font-weight: bold; color: white; }
   </style>
 </head>
 <body>
@@ -108,4 +121,5 @@
     }
   </script>
 </body>
+
 </html>
