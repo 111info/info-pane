@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
   <meta charset="UTF-8">
   <title>家族インフォメーション</title>
@@ -7,51 +7,47 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
   <style>
-    /* 1. 背景を白、文字を黒に変更 */
-    body { margin: 0; background-color: white; color: black; font-family: "Helvetica Neue", "Arial", "Hiragino Sans", "Meiryo", sans-serif; transition: 0.5s; overflow: hidden; }
+    /* 1. 基本設定：白背景・黒文字 */
+    body { 
+      margin: 0; 
+      background-color: white; 
+      color: black; 
+      font-family: "Helvetica Neue", "Arial", "Hiragino Sans", "Meiryo", sans-serif; 
+      transition: 0.5s; 
+      overflow: hidden; 
+    }
     #panel { height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
     
-    /* 2. 時計のデザイン（黒・太字） */
+    /* 2. 時計のデザイン（黒・極太） */
     #clock { font-size: 12vw; font-weight: 900; color: #333; }
     
-    /* 3. お知らせのデザイン（もっと大きく、黒・太字） */
+    /* 3. 日付とお知らせのデザイン */
+    #info-date { font-size: 3vw; font-weight: bold; color: #666; margin-top: 20px; }
     #message { 
       font-size: 8vw; 
       font-weight: 900; 
       color: black; 
-      margin-top: 10px;
-      padding: 0 20px;
+      margin-top: 5px;
+      padding: 0 40px;
       line-height: 1.2;
     }
     
-    /* 4. 「ごはん」の時（白背景のまま、文字を巨大にする場合） */
-    .alert-style { background-color: white !important; }
-    .alert-style #clock { display: none; } 
-    .alert-style #message { 
-      font-size: 20vw; 
-      color: #d32f2f; /* ここだけ目立つように赤にするのもアリです。黒が良ければ #000 に */
-      font-weight: 900; 
-    }
+    /* 4. 強調表示の調整（サイズを少し控えめに） */
+    .alert-gohan #clock, .alert-ofuro #clock { display: none; }
+    .alert-gohan #info-date, .alert-ofuro #info-date { display: none; }
+    
+    .alert-gohan #message { font-size: 12vw; color: #d32f2f; } /* ごはん：赤 */
+    .alert-ofuro #message { font-size: 12vw; color: #2196F3; } /* お風呂：青 */
 
-    /* 夜間モード：21時になったら真っ暗にする */
+    /* 夜間モード：21時以降 */
     .night-mode { background-color: black !important; visibility: hidden; }
-
-    /* 親機用ボタン */
-    .admin-area { display: none; padding: 20px; grid-template-columns: 1fr 1fr; gap: 10px; }
-    button { padding: 30px; font-size: 20px; border-radius: 10px; border: none; font-weight: bold; color: white; }
   </style>
 </head>
 <body>
 
   <div id="panel">
     <div id="clock">00:00</div>
-    <div id="message">おしらせ</div>
-  </div>
-
-  <div id="admin" class="admin-area">
-    <button onclick="updateDb('ごはん')" style="background:#4CAF50;">ごはん</button>
-    <button onclick="updateDb('お風呂')" style="background:#2196F3;">お風呂</button>
-    <button onclick="updateDb('通常')" style="background:#888;">通常に戻す</button>
+    <div id="info-date"></div> <div id="message">おしらせ</div>
   </div>
 
   <script>
@@ -63,21 +59,12 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database().ref('currentStatus');
 
-    // 親機か子機か判定（URLの最後に ?master を付けると親機になります）
-    const isMaster = window.location.search.includes('master');
-    if (isMaster) {
-      document.getElementById('panel').style.display = 'none';
-      document.getElementById('admin').style.display = 'grid';
-    }
-
-    // 1秒ごとに時計と夜間判定を更新
     function update() {
       const now = new Date();
       const h = now.getHours();
       const m = String(now.getMinutes()).padStart(2, '0');
       document.getElementById('clock').innerText = `${h}:${m}`;
 
-      // 毎日21時から朝7時までは「夜間モード」
       if (h >= 21 || h < 7) {
         document.body.classList.add('night-mode');
       } else {
@@ -86,34 +73,42 @@
     }
     setInterval(update, 1000);
 
-    // 親機からデータを送る
-    function updateDb(status) {
-      db.set({ mode: status, time: Date.now() });
-    }
-
-    // 子機がデータを受け取って画面を変える
+    // 受信処理
     db.on('value', (snap) => {
       const data = snap.val();
       if (!data) return;
 
       const body = document.body;
       const msg = document.getElementById('message');
+      const dateArea = document.getElementById('info-date');
+
+      // クラスをリセット
+      body.classList.remove('alert-gohan', 'alert-ofuro');
 
       if (data.mode === 'ごはん') {
-        body.classList.add('alert-style');
+        body.classList.add('alert-gohan');
         msg.innerText = "ごはんです";
         say("ごはんの時間です");
       } else if (data.mode === 'お風呂') {
-        body.classList.remove('alert-style');
+        body.classList.add('alert-ofuro');
         msg.innerText = "お風呂です";
         say("お風呂の時間です");
       } else {
-        body.classList.remove('alert-style');
-        msg.innerText = "おしらせはありません";
+        // 「通常」または「自由入力メッセージ」の場合
+        if (data.mode === '通常') {
+          msg.innerText = "おしらせはありません";
+          dateArea.innerText = "";
+        } else {
+          // 親機からの自由入力メッセージを表示
+          msg.innerText = data.mode;
+          dateArea.innerText = data.date || ""; // 送信された日付を表示
+          if (data.mode !== "おしらせはありません") {
+            say(data.mode);
+          }
+        }
       }
     });
 
-    // 声で読み上げる機能
     function say(text) {
       const uttr = new SpeechSynthesisUtterance(text);
       uttr.lang = "ja-JP";
@@ -121,5 +116,4 @@
     }
   </script>
 </body>
-
 </html>
