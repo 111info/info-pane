@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>家族パネル・子機</title>
+  <title>ひなたアシスタント</title>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
@@ -11,15 +11,13 @@
       font-family: "Hiragino Kaku Gothic ProN", sans-serif; 
       transition: 0.5s; overflow: hidden; touch-action: manipulation;
     }
-    /* 開始ボタン（画面全体を覆い、確実に押せるように） */
+    /* 開始ボタン（確実に反応させる） */
     #start-button {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: #4e342e; color: white; display: flex;
       flex-direction: column; justify-content: center; align-items: center;
       z-index: 10000; border: none; font-size: 6vw; font-weight: bold;
     }
-    #start-button span { font-size: 3vw; margin-top: 20px; opacity: 0.8; }
-
     #container { display: flex; flex-direction: column; width: 100vw; height: 100vh; padding: 20px; box-sizing: border-box; }
     #notice-section { flex: 0 0 45%; display: flex; align-items: center; justify-content: center; }
     #message-card { 
@@ -30,20 +28,19 @@
       opacity: 0; transform: translateY(-15px); transition: all 0.5s ease;
     }
     .show-msg #message-card { opacity: 1; transform: translateY(0); }
-    #message { font-size: 7.5vw; font-weight: 900; text-align: center; line-height: 1.25; color: #212121; }
+    #message { font-size: 8vw; font-weight: 900; text-align: center; line-height: 1.25; color: #212121; }
+    
     #clock-section { flex: 0 0 55%; display: flex; flex-direction: column; justify-content: center; align-items: center; }
     #info-date { font-size: 4.5vw; font-weight: bold; color: #795548; margin-bottom: 5px; }
-    #clock { font-size: 22vw; font-weight: 900; line-height: 1; color: #4e342e; }
+    #clock { font-size: 24vw; font-weight: 900; line-height: 1; color: #4e342e; }
     
-    .night-mode { background-color: #000 !important; }
-    .night-mode #container { display: none; }
     #localVideo { position: fixed; width: 1px; height: 1px; opacity: 0; }
   </style>
 </head>
 <body>
   <button id="start-button" onclick="userActive()">
-    ここを一度タップしてください
-    <span>システムを開始します</span>
+    画面をタップしてください
+    <div style="font-size:3vw; margin-top:20px;">「ひなた」と呼ぶと反応します</div>
   </button>
 
   <div id="container">
@@ -72,108 +69,96 @@
 
     // 時計更新
     function updateClock() {
-      if (document.body.classList.contains('night-mode')) return;
       var now = new Date();
       var dayList = ["日", "月", "火", "水", "木", "金", "土"];
       document.getElementById('info-date').innerText = (now.getMonth() + 1) + "月" + now.getDate() + "日 (" + dayList[now.getDay()] + ")";
-      document.getElementById('clock').innerText = now.getHours() + ":" + ("0" + now.getMinutes()).slice(-2);
+      document.getElementById('clock').innerText = ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2);
     }
     setInterval(updateClock, 1000);
     updateClock();
 
     // 音声読み上げ
     function say(txt) {
-      if (!isReady) return;
+      if (!isReady || !txt) return;
       window.speechSynthesis.cancel();
       var uttr = new SpeechSynthesisUtterance(txt);
       uttr.lang = "ja-JP";
-      uttr.rate = 0.85;
+      uttr.rate = 0.9; 
+      uttr.pitch = 1.1;
       window.speechSynthesis.speak(uttr);
     }
 
-    // データ受信
+    // ★ひなたアシスタントの知能（シンプル版）
+    function hinataAssistant(text) {
+      if (text === "ごはん") return "ごはんです。";
+      if (text === "お風呂") return "お風呂です。";
+      if (text.includes("何時") || text.includes("いま")) {
+        var now = new Date();
+        return "現在は" + now.getHours() + "時" + now.getMinutes() + "分です。";
+      }
+      return text;
+    }
+
+    // 音声認識（呼びかけ待機）
+    function startListening() {
+      var Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!Recognition) return;
+      var rec = new Recognition();
+      rec.lang = "ja-JP";
+      rec.continuous = false; // iPadの安定性のために1回ずつ区切る
+
+      rec.onresult = function(event) {
+        var result = event.results[0][0].transcript;
+        if (result.includes("ひなた")) {
+          say("はい、ひなたです。");
+        } else if (result.includes("何時") || result.includes("時間")) {
+            say(hinataAssistant("何時"));
+        }
+      };
+
+      // 止まったら即座に再起動して「常時待機」を模倣
+      rec.onend = function() { rec.start(); }; 
+      rec.onerror = function() { setTimeout(function(){ rec.start(); }, 1000); };
+      rec.start();
+    }
+
+    // Firebase受信
     db.ref('currentStatus').on('value', function(snap) {
       var data = snap.val();
       if (!data) return;
+      var rawMsg = data.mode || "";
+      var displayMsg = hinataAssistant(rawMsg);
+
       var body = document.body;
-      var h = new Date().getHours();
-      
-      if (data.nightMode == 1 || (data.nightMode == 0 && (h >= 21 || h < 7))) {
-        body.classList.add('night-mode');
-      } else {
-        body.classList.remove('night-mode');
-      }
+      body.classList.remove('show-msg');
+      if (rawMsg !== "通常" && rawMsg !== "") body.classList.add('show-msg');
+      document.getElementById('message').innerText = rawMsg === "通常" ? "" : rawMsg;
 
-      body.classList.remove('alert-gohan', 'alert-ofuro', 'show-msg');
-      var displayMsg = "";
-      
-      if (data.mode === 'ごはん') {
-        body.classList.add('alert-gohan', 'show-msg');
-        displayMsg = "ごはんです";
-      } else if (data.mode === 'お風呂') {
-        body.classList.add('alert-ofuro', 'show-msg');
-        displayMsg = "お風呂です";
-      } else if (data.mode !== "通常" && data.mode !== "") {
-        body.classList.add('show-msg');
-        displayMsg = data.mode;
-      }
-      document.getElementById('message').innerText = displayMsg;
-
-      if (!body.classList.contains('night-mode') && displayMsg !== lastMsg && displayMsg !== "") {
+      if (displayMsg !== lastMsg && displayMsg !== "") {
         say(displayMsg);
         lastMsg = displayMsg;
-      } else if (data.mode === "通常") {
+      } else if (rawMsg === "通常") {
         lastMsg = "";
       }
     });
 
-    // ★音声解禁のための重要処理
+    // システム開始
     function userActive() {
       isReady = true;
       document.getElementById('start-button').style.display = 'none';
-      
-      // 1. AudioContextを再開
       var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       audioCtx.resume();
+      document.getElementById('dummy-audio').play();
       
-      // 2. ダミーの無音ループ再生を開始（スピーカーをアクティブに保つ）
-      var dummy = document.getElementById('dummy-audio');
-      dummy.play().catch(function(e){ console.log(e); });
-      
-      // 3. 確認の読み上げ
-      say("システムを開始しました。");
+      say("ひなた、準備できました。");
+      startListening(); 
 
-      // 4. 定期的に無音を喋らせてSpeechエンジンが寝るのを防ぐ
+      // Speechエンジンを眠らせない
       setInterval(function() {
         var silence = new SpeechSynthesisUtterance("");
         silence.volume = 0;
         window.speechSynthesis.speak(silence);
       }, 10000);
-    }
-
-    // カメラ
-    db.ref('cameraControl').on('value', function(snap) {
-      if (snap.val() === 'ON') { startCamera(); } else { stopCamera(); }
-    });
-    var localStream = null; var streamInterval = null;
-    function startCamera() {
-      if (localStream) return;
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
-      .then(function(stream) {
-        localStream = stream;
-        document.getElementById('localVideo').srcObject = stream;
-        var canvas = document.createElement('canvas');
-        streamInterval = setInterval(function() {
-          canvas.width = 320; canvas.height = 240;
-          canvas.getContext('2d').drawImage(document.getElementById('localVideo'), 0, 0, canvas.width, canvas.height);
-          db.ref('cameraData').set({ image: canvas.toDataURL('image/jpeg', 0.5) });
-        }, 800);
-      });
-    }
-    function stopCamera() {
-      if (streamInterval) clearInterval(streamInterval);
-      if (localStream) { localStream.getTracks().forEach(function(t) { t.stop(); }); localStream = null; }
-      db.ref('cameraData').set({ image: "" });
     }
   </script>
 </body>
