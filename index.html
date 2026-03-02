@@ -6,6 +6,7 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
+    /* 全体：UDフォントと土壁カラー */
     body { 
       margin: 0; 
       background-color: #eaddca; 
@@ -17,83 +18,108 @@
 
     #container {
       display: flex;
+      flex-direction: column; /* 上下分割 */
       width: 100vw;
       height: 100vh;
-    }
-
-    /* 左側 50%：時計エリア（左下配置） */
-    #clock-section {
-      flex: 0 0 50%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end; /* 下に寄せる */
-      padding: 0 0 5% 5%;
+      padding: 20px;
       box-sizing: border-box;
     }
 
-    #info-date { font-size: 4vw; font-weight: bold; color: #795548; margin-bottom: 5px; }
-    #clock { font-size: 15vw; font-weight: 900; line-height: 1; color: #4e342e; }
-
-    /* 右側 50%：通知エリア */
+    /* 上側：お知らせ通知エリア */
     #notice-section {
-      flex: 0 0 50%;
-      height: 100%;
+      flex: 1; /* 上下均等 (50:50) */
       display: flex;
       align-items: center;
       justify-content: center;
+      margin-bottom: 10px;
       position: relative;
     }
 
     #message-card { 
-      position: absolute;
-      right: -110%; /* 待機時 */
-      width: 90%;
-      height: 80%;
-      background: rgba(255, 255, 255, 0.96); 
-      border-radius: 40px; 
-      box-shadow: -15px 15px 40px rgba(0,0,0,0.15);
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.9); 
+      border-radius: 30px; 
+      box-shadow: 0 10px 20px rgba(0,0,0,0.1);
       display: flex; 
       justify-content: center; 
       align-items: center; 
-      padding: 30px;
+      padding: 20px;
       box-sizing: border-box;
-      transition: right 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-      border: 4px solid #d7ccc8;
+      border: 3px solid #d7ccc8;
+      /* 初期状態は透明にして、通知が来たら浮き上がる */
+      opacity: 0;
+      transform: translateY(-20px);
+      transition: all 0.5s ease-out;
     }
 
-    .show-msg #message-card { right: 5%; }
+    /* 通知がある時 */
+    .show-msg #message-card { 
+      opacity: 1;
+      transform: translateY(0);
+    }
 
     #message { 
-      font-size: 9vw; /* 通知も大きく */
+      font-size: 8vw; 
       font-weight: 900; 
       text-align: center; 
       line-height: 1.3;
       color: #212121;
     }
 
+    /* 下側：時計・日にちエリア */
+    #clock-section {
+      flex: 1; /* 上下均等 (50:50) */
+      background: rgba(255, 255, 255, 0.5); /* ほんのり透ける漆喰風 */
+      border-radius: 30px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      border: 3px solid rgba(215, 204, 200, 0.5);
+    }
+
+    #info-date { 
+      font-size: 4vw; 
+      font-weight: bold; 
+      color: #795548;
+      margin-bottom: 10px;
+    }
+
+    #clock { 
+      font-size: 18vw; 
+      font-weight: 900; 
+      line-height: 1;
+      color: #4e342e;
+    }
+
+    /* 状態別カラー */
     .alert-gohan #message-card { background: #fff8f8; border-color: #ff8a80; }
     .alert-gohan #message { color: #d32f2f; }
     .alert-ofuro #message-card { background: #f0f8ff; border-color: #82b1ff; }
     .alert-ofuro #message { color: #1976d2; }
 
+    /* 夜間モード */
     .night-mode { background-color: #000 !important; }
     .night-mode #container { display: none; }
+
     #localVideo { position: fixed; width: 1px; height: 1px; opacity: 0; }
   </style>
 </head>
 <body onclick="userActive()">
   <div id="container">
-    <div id="clock-section">
-      <div id="info-date"></div>
-      <div id="clock">00:00</div>
-    </div>
     <div id="notice-section">
       <div id="message-card">
-        <div id="message">準備中</div>
+        <div id="message">おしらせ</div>
       </div>
     </div>
+    
+    <div id="clock-section">
+      <div id="info-date">読み込み中...</div>
+      <div id="clock">00:00</div>
+    </div>
   </div>
+  
   <video id="localVideo" autoplay playsinline muted></video>
 
   <script>
@@ -106,12 +132,21 @@
     var db = firebase.database();
     var lastMsg = "";
 
-    // 時計
-    setInterval(function() {
+    // 時計と日付の更新
+    function updateClock() {
       if (document.body.classList.contains('night-mode')) return;
       var now = new Date();
+      var y = now.getFullYear();
+      var m = now.getMonth() + 1;
+      var d = now.getDate();
+      var dayList = ["日", "月", "火", "水", "木", "金", "土"];
+      var day = dayList[now.getDay()];
+      
+      document.getElementById('info-date').innerText = m + "月" + d + "日 (" + day + ")";
       document.getElementById('clock').innerText = now.getHours() + ":" + ("0" + now.getMinutes()).slice(-2);
-    }, 1000);
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
 
     // 音声読み上げ本体
     function say(txt) {
@@ -119,23 +154,25 @@
       window.speechSynthesis.cancel();
       var uttr = new SpeechSynthesisUtterance(txt);
       uttr.lang = "ja-JP";
-      uttr.rate = 0.8; // ゆっくり聞き取りやすく
+      uttr.rate = 0.85; 
       window.speechSynthesis.speak(uttr);
     }
 
-    // iOS/iPadOS 12のための音声スリープ防止
+    // iOS/iPadOS音声スリープ対策（無音再生）
     function keepAudioAlive() {
-      var uttr = new SpeechSynthesisUtterance(""); // 無音
+      var uttr = new SpeechSynthesisUtterance("");
       uttr.volume = 0;
       window.speechSynthesis.speak(uttr);
     }
 
+    // Firebaseデータ受信
     db.ref('currentStatus').on('value', function(snap) {
       var data = snap.val();
       if (!data) return;
       var body = document.body;
       var h = new Date().getHours();
       
+      // 夜間モード
       if (data.nightMode == 1 || (data.nightMode == 0 && (h >= 21 || h < 7))) {
         body.classList.add('night-mode');
       } else {
@@ -154,12 +191,11 @@
       } else if (data.mode !== "通常" && data.mode !== "") {
         body.classList.add('show-msg');
         displayMsg = data.mode;
-        document.getElementById('info-date').innerText = data.date || "";
       }
 
       document.getElementById('message').innerText = displayMsg;
 
-      // 音声読み上げトリガー
+      // 音声読み上げ
       if (!body.classList.contains('night-mode') && displayMsg !== lastMsg && displayMsg !== "") {
         say(displayMsg);
         lastMsg = displayMsg;
@@ -168,13 +204,12 @@
       }
     });
 
-    // 初回タップ時の「儀式」
+    // 画面タップで音声有効化
     function userActive() {
       var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       audioCtx.resume();
       say("準備完了。");
-      // スリープ防止を定期的に実行
-      setInterval(keepAudioAlive, 10000);
+      setInterval(keepAudioAlive, 10000); // 10秒ごとに音声エンジンを起こす
     }
 
     // カメラ機能（変更なし）
