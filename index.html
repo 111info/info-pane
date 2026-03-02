@@ -2,53 +2,36 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>家族インフォメーション</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>家族パネル・子機</title>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-
   <style>
-    /* 1. 基本設定：白背景・黒文字 */
-    body { 
-      margin: 0; 
-      background-color: white; 
-      color: black; 
-      font-family: "Helvetica Neue", "Arial", "Hiragino Sans", "Meiryo", sans-serif; 
-      transition: 0.5s; 
-      overflow: hidden; 
-    }
+    body { margin: 0; background-color: white; color: black; font-family: sans-serif; transition: 0.5s; overflow: hidden; }
     #panel { height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
-    
-    /* 2. 時計のデザイン（黒・極太） */
     #clock { font-size: 12vw; font-weight: 900; color: #333; }
-    
-    /* 3. 日付とお知らせのデザイン */
     #info-date { font-size: 3vw; font-weight: bold; color: #666; margin-top: 20px; }
-    #message { 
-      font-size: 8vw; 
-      font-weight: 900; 
-      color: black; 
-      margin-top: 5px;
-      padding: 0 40px;
-      line-height: 1.2;
-    }
+    #message { font-size: 8vw; font-weight: 900; margin-top: 5px; padding: 0 40px; line-height: 1.2; }
     
-    /* 4. 強調表示の調整（サイズを少し控えめに） */
+    /* 強調表示 */
     .alert-gohan #clock, .alert-ofuro #clock { display: none; }
-    .alert-gohan #info-date, .alert-ofuro #info-date { display: none; }
-    
-    .alert-gohan #message { font-size: 12vw; color: #d32f2f; } /* ごはん：赤 */
-    .alert-ofuro #message { font-size: 12vw; color: #2196F3; } /* お風呂：青 */
+    .alert-gohan #message { font-size: 12vw; color: #d32f2f; }
+    .alert-ofuro #message { font-size: 12vw; color: #2196F3; }
 
-    /* 夜間モード：21時以降 */
-    .night-mode { background-color: black !important; visibility: hidden; }
+    /* 超・夜間モード：真っ黒にして何も表示しない */
+    .night-mode { background-color: black !important; }
+    .night-mode #panel { display: none; }
+
+    /* カメラ映像の隠し要素 */
+    #localVideo { position: fixed; bottom: 0; right: 0; width: 1px; height: 1px; opacity: 0; }
   </style>
 </head>
-<body>
-
-  <div id="panel">
+<body onclick="initCamera()"> <div id="panel">
     <div id="clock">00:00</div>
-    <div id="info-date"></div> <div id="message">おしらせ</div>
+    <div id="info-date"></div>
+    <div id="message">おしらせ</div>
   </div>
+  <video id="localVideo" autoplay playsinline muted></video>
 
   <script>
     const firebaseConfig = {
@@ -59,21 +42,18 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database().ref('currentStatus');
 
-    function update() {
-      const now = new Date();
-      const h = now.getHours();
-      const m = String(now.getMinutes()).padStart(2, '0');
-      document.getElementById('clock').innerText = `${h}:${m}`;
+    let isNight = false;
 
-      if (h >= 21 || h < 7) {
-        document.body.classList.add('night-mode');
-      } else {
-        document.body.classList.remove('night-mode');
-      }
+    // 1秒ごとの更新
+    function update() {
+      if (isNight) return; // 夜間モード中は処理をスキップして節電
+      const now = new Date();
+      document.getElementById('clock').innerText = 
+        now.getHours() + ":" + String(now.getMinutes()).padStart(2, '0');
     }
     setInterval(update, 1000);
 
-    // 受信処理
+    // データ受信
     db.on('value', (snap) => {
       const data = snap.val();
       if (!data) return;
@@ -82,37 +62,48 @@
       const msg = document.getElementById('message');
       const dateArea = document.getElementById('info-date');
 
-      // クラスをリセット
-      body.classList.remove('alert-gohan', 'alert-ofuro');
+      // 1. 夜間モード判定（0:自動, 1:強制夜, 2:強制昼）
+      const h = new Date().getHours();
+      const mode = data.nightMode || 0;
+      if (mode == 1 || (mode == 0 && (h >= 21 || h < 7))) {
+        isNight = true;
+        body.classList.add('night-mode');
+      } else {
+        isNight = false;
+        body.classList.remove('night-mode');
+      }
 
+      // 2. 表示内容更新
+      body.classList.remove('alert-gohan', 'alert-ofuro');
       if (data.mode === 'ごはん') {
         body.classList.add('alert-gohan');
         msg.innerText = "ごはんです";
-        say("ごはんの時間です");
       } else if (data.mode === 'お風呂') {
         body.classList.add('alert-ofuro');
         msg.innerText = "お風呂です";
-        say("お風呂の時間です");
       } else {
-        // 「通常」または「自由入力メッセージ」の場合
-        if (data.mode === '通常') {
-          msg.innerText = "おしらせはありません";
-          dateArea.innerText = "";
-        } else {
-          // 親機からの自由入力メッセージを表示
-          msg.innerText = data.mode;
-          dateArea.innerText = data.date || ""; // 送信された日付を表示
-          if (data.mode !== "おしらせはありません") {
-            say(data.mode);
-          }
-        }
+        msg.innerText = data.mode || "おしらせはありません";
+        dateArea.innerText = data.date || "";
       }
+      
+      // 音声読み上げ（夜間以外）
+      if (!isNight && data.mode !== "通常") say(msg.innerText);
     });
 
     function say(text) {
+      window.speechSynthesis.cancel();
       const uttr = new SpeechSynthesisUtterance(text);
       uttr.lang = "ja-JP";
       window.speechSynthesis.speak(uttr);
+    }
+
+    // カメラ機能（簡易版：親機からのリクエストを待つ）
+    async function initCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        document.getElementById('localVideo').srcObject = stream;
+        console.log("Camera Ready");
+      } catch (e) { console.error("Camera Error", e); }
     }
   </script>
 </body>
