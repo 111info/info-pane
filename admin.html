@@ -9,22 +9,29 @@
   <style>
     body { margin: 0; background-color: #f0f0f0; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 10px; }
     .card { width: 100%; max-width: 400px; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; box-sizing: border-box; }
-    h2 { font-size: 14px; color: #666; margin-bottom: 10px; }
-    .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; color: white; margin-bottom: 8px; cursor: pointer; }
+    h2 { font-size: 14px; color: #666; margin: 0 0 10px 0; }
+    .btn { width: 100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; color: white; margin-bottom: 8px; cursor: pointer; }
     .btn-send { background: #444; }
     .btn-gohan { background: #ce0000; width: 48%; }
     .btn-ofuro { background: #2196F3; width: 48%; }
     .btn-cam-on { background: #28a745; }
     .btn-cam-off { background: #dc3545; }
-    #monitor { width: 100%; height: 240px; background: #000; border-radius: 10px; margin-top: 10px; object-fit: contain; }
-    .flex { display: flex; justify-content: space-between; }
+    .btn-night { background: #4b0082; font-size: 12px; }
+    .btn-day { background: #ff8c00; font-size: 12px; }
+    #monitor-container { width: 100%; height: 240px; background: #000; border-radius: 10px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
+    #monitor { width: 100%; height: 100%; object-fit: contain; }
+    #monitor-placeholder { position: absolute; color: white; font-size: 14px; }
+    .flex { display: flex; justify-content: space-between; gap: 5px; }
   </style>
 </head>
 <body>
 
   <div class="card">
-    <h2>カメラモニター</h2>
-    <img id="monitor" src="" alt="映像停止中">
+    <h2>カメラモニター: <span id="status-text">-</span></h2>
+    <div id="monitor-container">
+      <div id="monitor-placeholder">映像停止中</div>
+      <img id="monitor" src="" style="display:none;">
+    </div>
     <div class="flex" style="margin-top:10px;">
       <button class="btn btn-cam-on" style="width:48%" onclick="camControl('ON')">カメラ起動</button>
       <button class="btn btn-cam-off" style="width:48%" onclick="camControl('OFF')">シャットダウン</button>
@@ -33,7 +40,7 @@
 
   <div class="card">
     <h2>おしらせ送信</h2>
-    <input type="text" id="custom-message" placeholder="メッセージを入力" style="width:100%; padding:10px; margin-bottom:10px; border-radius:5px; border:1px solid #ccc;">
+    <input type="text" id="custom-message" placeholder="メッセージを入力" style="width:100%; padding:12px; margin-bottom:10px; border:1px solid #ccc; border-radius:8px; box-sizing:border-box;">
     <button class="btn btn-send" onclick="sendCustom()">送信</button>
   </div>
 
@@ -45,33 +52,49 @@
     <button class="btn" style="background:#888" onclick="updateDb('通常')">時計に戻す</button>
   </div>
 
+  <div class="card">
+    <h2>夜間モード切替</h2>
+    <div class="flex">
+      <button class="btn btn-night" style="width:32%" onclick="setNight(1)">強制夜</button>
+      <button class="btn btn-day" style="width:32%" onclick="setNight(2)">強制昼</button>
+      <button class="btn" style="width:32%; background:#888; font-size:12px;" onclick="setNight(0)">自動</button>
+    </div>
+  </div>
+
   <script>
-    const firebaseConfig = {
+    var firebaseConfig = {
       apiKey: "AIzaSyAP10nWUJqwlv-9yNtbMB6iBsawb44wn2A",
       databaseURL: "https://info-pane-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "info-pane"
     };
     firebase.initializeApp(firebaseConfig);
-    const db = firebase.database().ref('currentStatus');
-    const camCtrl = firebase.database().ref('cameraControl');
+    var db = firebase.database();
 
-    function updateDb(mode) { db.update({ mode: mode, date: "" }); }
-    function camControl(cmd) { camCtrl.set(cmd); }
+    function updateDb(m) { db.ref('currentStatus').update({ mode: m, date: "" }); }
+    function camControl(c) { db.ref('cameraControl').set(c); }
+    function setNight(v) { db.ref('currentStatus').update({ nightMode: v }); }
 
     function sendCustom() {
-      const text = document.getElementById('custom-message').value;
-      if(!text) return;
-      const now = new Date();
-      const dateStr = (now.getMonth()+1)+"/"+now.getDate()+" "+now.getHours()+":"+String(now.getMinutes()).padStart(2,'0');
-      db.update({ mode: text, date: dateStr });
+      var txt = document.getElementById('custom-message').value;
+      if(!txt) return;
+      var now = new Date();
+      var dStr = (now.getMonth()+1)+"/"+now.getDate()+" "+now.getHours()+":"+("0"+now.getMinutes()).slice(-2);
+      db.ref('currentStatus').update({ mode: txt, date: dStr });
       document.getElementById('custom-message').value = "";
     }
 
-    // 映像の受信
-    firebase.database().ref('cameraData').on('value', (snap) => {
-      const data = snap.val();
-      if (data && data.image) {
-        document.getElementById('monitor').src = data.image;
+    db.ref('currentStatus').on('value', function(snap) {
+      var d = snap.val(); if(d) document.getElementById('status-text').innerText = d.mode;
+    });
+
+    db.ref('cameraData').on('value', function(snap) {
+      var d = snap.val();
+      var img = document.getElementById('monitor');
+      var ph = document.getElementById('monitor-placeholder');
+      if (d && d.image) {
+        img.src = d.image; img.style.display = 'block'; ph.style.display = 'none';
+      } else {
+        img.src = ""; img.style.display = 'none'; ph.style.display = 'block';
       }
     });
   </script>
