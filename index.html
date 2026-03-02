@@ -2,7 +2,6 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>家族パネル・子機</title>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -12,21 +11,18 @@
     #clock { font-size: 12vw; font-weight: 900; color: #333; }
     #info-date { font-size: 3vw; font-weight: bold; color: #666; margin-top: 20px; }
     #message { font-size: 8vw; font-weight: 900; margin-top: 5px; padding: 0 40px; line-height: 1.2; }
-    
-    /* 強調表示 */
     .alert-gohan #clock, .alert-ofuro #clock { display: none; }
     .alert-gohan #message { font-size: 12vw; color: #d32f2f; }
     .alert-ofuro #message { font-size: 12vw; color: #2196F3; }
-
-    /* 超・夜間モード：真っ黒にして何も表示しない */
     .night-mode { background-color: black !important; }
     .night-mode #panel { display: none; }
-
-    /* カメラ映像の隠し要素 */
-    #localVideo { position: fixed; bottom: 0; right: 0; width: 1px; height: 1px; opacity: 0; }
+    /* カメラ映像（子機側は非表示でOK） */
+    #localVideo { position: fixed; width: 1px; height: 1px; opacity: 0; }
   </style>
 </head>
-<body onclick="initCamera()"> <div id="panel">
+<body onclick="startCameraSetup()">
+
+  <div id="panel">
     <div id="clock">00:00</div>
     <div id="info-date"></div>
     <div id="message">おしらせ</div>
@@ -41,69 +37,95 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database().ref('currentStatus');
+    const camRef = firebase.database().ref('cameraData');
 
     let isNight = false;
+    let localStream = null;
+    let peerConnection = null;
 
-    // 1秒ごとの更新
+    // 時計更新
     function update() {
-      if (isNight) return; // 夜間モード中は処理をスキップして節電
+      if (isNight) return;
       const now = new Date();
-      document.getElementById('clock').innerText = 
-        now.getHours() + ":" + String(now.getMinutes()).padStart(2, '0');
+      document.getElementById('clock').innerText = now.getHours() + ":" + String(now.getMinutes()).padStart(2, '0');
     }
     setInterval(update, 1000);
 
-    // データ受信
+    // ステータス受信
     db.on('value', (snap) => {
       const data = snap.val();
       if (!data) return;
-
-      const body = document.body;
-      const msg = document.getElementById('message');
-      const dateArea = document.getElementById('info-date');
-
-      // 1. 夜間モード判定（0:自動, 1:強制夜, 2:強制昼）
       const h = new Date().getHours();
       const mode = data.nightMode || 0;
       if (mode == 1 || (mode == 0 && (h >= 21 || h < 7))) {
         isNight = true;
-        body.classList.add('night-mode');
+        document.body.classList.add('night-mode');
       } else {
         isNight = false;
-        body.classList.remove('night-mode');
+        document.body.classList.remove('night-mode');
       }
-
-      // 2. 表示内容更新
-      body.classList.remove('alert-gohan', 'alert-ofuro');
+      document.body.classList.remove('alert-gohan', 'alert-ofuro');
       if (data.mode === 'ごはん') {
-        body.classList.add('alert-gohan');
-        msg.innerText = "ごはんです";
+        document.body.classList.add('alert-gohan');
+        document.getElementById('message').innerText = "ごはんです";
       } else if (data.mode === 'お風呂') {
-        body.classList.add('alert-ofuro');
-        msg.innerText = "お風呂です";
+        document.body.classList.add('alert-ofuro');
+        document.getElementById('message').innerText = "お風呂です";
       } else {
-        msg.innerText = data.mode || "おしらせはありません";
-        dateArea.innerText = data.date || "";
+        document.getElementById('message').innerText = data.mode || "おしらせはありません";
+        document.getElementById('info-date').innerText = data.date || "";
       }
-      
-      // 音声読み上げ（夜間以外）
-      if (!isNight && data.mode !== "通常") say(msg.innerText);
     });
 
-    function say(text) {
-      window.speechSynthesis.cancel();
-      const uttr = new SpeechSynthesisUtterance(text);
-      uttr.lang = "ja-JP";
-      window.speechSynthesis.speak(uttr);
+    // --- カメラ機能のコア部分 ---
+    // 親機からのカメラ要求を監視
+    firebase.database().ref('cameraControl').on('value', async (snap) => {
+      const cmd = snap.val();
+      if (cmd === 'ON') {
+        await startCamera();
+      } else if (cmd === 'OFF') {
+        stopCamera();
+      }
+    });
+
+    async function startCamera() {
+      if (localStream) return;
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+        document.getElementById('localVideo').srcObject = localStream;
+        // 本来はここにWebRTCのシグナリングを書きますが、
+        // iPad Air 1では「静止画を連続送信」する方が安定するため、今回は簡易版として実装します。
+        startSnapshotStreaming();
+      } catch (e) { alert("カメラ起動失敗"); }
     }
 
-    // カメラ機能（簡易版：親機からのリクエストを待つ）
-    async function initCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        document.getElementById('localVideo').srcObject = stream;
-        console.log("Camera Ready");
-      } catch (e) { console.error("Camera Error", e); }
+    function stopCamera() {
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+      }
+      clearInterval(streamInterval);
+    }
+
+    let streamInterval;
+    function startSnapshotStreaming() {
+      const canvas = document.createElement('canvas');
+      const video = document.getElementById('localVideo');
+      streamInterval = setInterval(() => {
+        if (!localStream) return;
+        canvas.width = 320;
+        canvas.height = 240;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        const data = canvas.toDataURL('image/jpeg', 0.5);
+        camRef.set({ image: data });
+      }, 500); // 0.5秒ごとに更新（バッテリー優先）
+    }
+
+    function startCameraSetup() {
+      // iOSの儀式用
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      audioCtx.resume();
+      console.log("Interaction started");
     }
   </script>
 </body>
