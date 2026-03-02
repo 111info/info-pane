@@ -2,45 +2,60 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>家族パネル・子機</title>
+  <title>インフォメーションパネル</title>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
     body { 
       margin: 0; background-color: #eaddca; color: #3e2723; 
-      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif; 
+      font-family: "Hiragino Kaku Gothic ProN", sans-serif; 
       transition: 0.5s; overflow: hidden; touch-action: manipulation;
     }
     /* 開始ボタン */
     #start-button {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: #4e342e; color: white; display: flex;
-      flex-direction: column; justify-content: center; align-items: center;
-      z-index: 10000; border: none; font-size: 6vw; font-weight: bold;
+      justify-content: center; align-items: center; z-index: 10000; border: none; font-size: 5vw;
     }
 
-    #container { display: flex; flex-direction: column; width: 100vw; height: 100vh; padding: 20px; box-sizing: border-box; }
-    
-    /* 上側：お知らせ（45%） */
-    #notice-section { flex: 0 0 45%; display: flex; align-items: center; justify-content: center; }
-    #message-card { 
-      width: 95%; height: 90%; background: rgba(255, 255, 255, 0.96); 
-      border-radius: 40px; box-shadow: 0 12px 30px rgba(0,0,0,0.1);
-      display: flex; justify-content: center; align-items: center; padding: 30px;
-      box-sizing: border-box; border: 3px solid #d7ccc8;
-      opacity: 0; transform: translateY(-15px); transition: all 0.5s ease;
+    #main-wrapper {
+      display: flex; width: 100vw; height: 100vh; padding: 25px; box-sizing: border-box;
     }
-    .show-msg #message-card { opacity: 1; transform: translateY(0); }
-    #message { font-size: 8vw; font-weight: 900; text-align: center; line-height: 1.25; color: #212121; }
+
+    /* 左側：メイン表示（通常は時計、通知時は「ごはん」「お風呂」） */
+    #left-panel {
+      flex: 1.3; background: rgba(255,255,255,0.4); border-radius: 50px;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      margin-right: 25px; border: 2px solid rgba(255,255,255,0.5);
+      transition: background-color 0.5s, color 0.5s;
+    }
+    #main-display { font-size: 16vw; font-weight: 900; text-align: center; line-height: 1.1; white-space: pre-wrap; }
+    #sub-date { font-size: 5.5vw; font-weight: bold; margin-top: 25px; color: #795548; }
+
+    /* 右側：通知履歴エリア */
+    #right-panel {
+      flex: 1; display: flex; flex-direction: column;
+    }
+    #history-title { font-size: 4.5vw; font-weight: 900; margin-bottom: 15px; padding-left: 10px; }
     
-    /* 下側：時計（55%・枠なし） */
-    #clock-section { flex: 0 0 55%; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-    #info-date { font-size: 4.5vw; font-weight: bold; color: #795548; margin-bottom: 5px; }
-    #clock { font-size: 24vw; font-weight: 900; line-height: 1; color: #4e342e; }
+    .history-card {
+      background: rgba(255,255,255,0.8); border-radius: 30px; margin-bottom: 15px;
+      padding: 10px; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 2px solid #d7ccc8;
+      text-align: center; font-weight: bold; overflow: hidden;
+    }
     
-    /* 夜間モード */
-    .night-mode { background-color: #000 !important; }
-    .night-mode #container { display: none !important; }
+    /* 履歴のサイズ調整（資料準拠） */
+    #hist-0 { flex: 1.2; font-size: 4.5vw; background: #fff; } /* 最新 */
+    #hist-1 { flex: 1.0; font-size: 3.5vw; opacity: 0.8; }      /* 2個前 */
+    #hist-2 { flex: 0.8; font-size: 2.5vw; opacity: 0.6; }      /* 3個前 */
+
+    /* 特別な状態のスタイル */
+    .gohan-mode #left-panel { background-color: #fff0f0; border-color: #ffab91; color: #d84315; }
+    .ofuro-mode #left-panel { background-color: #f0f4ff; border-color: #82b1ff; color: #1976d2; }
+    
+    .night-mode { background: #000 !important; }
+    .night-mode #main-wrapper { display: none; }
 
     #localVideo { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
   </style>
@@ -48,16 +63,20 @@
 <body>
   <button id="start-button" onclick="userActive()">画面をタップして開始</button>
 
-  <div id="container">
-    <div id="notice-section">
-      <div id="message-card"><div id="message"></div></div>
+  <div id="main-wrapper">
+    <div id="left-panel">
+      <div id="main-display">00:00</div>
+      <div id="sub-date">--月--日 (曜)</div>
     </div>
-    <div id="clock-section">
-      <div id="info-date">--月--日 (曜)</div>
-      <div id="clock">00:00</div>
+
+    <div id="right-panel">
+      <div id="history-title">通知</div>
+      <div id="hist-0" class="history-card">通知はありません</div>
+      <div id="hist-1" class="history-card">-</div>
+      <div id="hist-2" class="history-card">-</div>
     </div>
   </div>
-  
+
   <video id="localVideo" autoplay playsinline muted></video>
 
   <script>
@@ -68,107 +87,106 @@
     };
     if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
     var db = firebase.database();
-    var lastMsg = "";
     var isReady = false;
+    var lastMode = "";
+    var msgHistory = ["(なし)", "(なし)", "(なし)"];
 
-    // 時計更新
     function updateClock() {
       var now = new Date();
       var dayList = ["日", "月", "火", "水", "木", "金", "土"];
-      document.getElementById('info-date').innerText = (now.getMonth() + 1) + "月" + now.getDate() + "日 (" + dayList[now.getDay()] + ")";
-      document.getElementById('clock').innerText = ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2);
+      var dateStr = (now.getMonth() + 1) + "月" + now.getDate() + "日 (" + dayList[now.getDay()] + ")";
+      var timeStr = ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2);
+      
+      document.getElementById('sub-date').innerText = dateStr;
+      
+      // ごはん・お風呂以外の時だけ時計を表示
+      if (lastMode !== "ごはん" && lastMode !== "お風呂") {
+        document.getElementById('main-display').innerText = timeStr;
+      }
     }
     setInterval(updateClock, 1000);
-    updateClock();
 
-    // 音声読み上げ（シンプル版）
     function say(txt) {
       if (!isReady || !txt) return;
       window.speechSynthesis.cancel();
       var uttr = new SpeechSynthesisUtterance(txt);
-      uttr.lang = "ja-JP";
-      uttr.rate = 0.9;
+      uttr.lang = "ja-JP"; uttr.rate = 0.9;
       window.speechSynthesis.speak(uttr);
     }
 
-    // メインロジック（通知・夜間モード）
+    function updateHistoryUI() {
+      document.getElementById('hist-0').innerText = msgHistory[0];
+      document.getElementById('hist-1').innerText = msgHistory[1];
+      document.getElementById('hist-2').innerText = msgHistory[2];
+    }
+
     db.ref('currentStatus').on('value', function(snap) {
       var data = snap.val();
       if (!data) return;
+      var mode = data.mode || "通常";
       var body = document.body;
-      var h = new Date().getHours();
-      
+      var mainDisp = document.getElementById('main-display');
+
       // 夜間モード判定
+      var h = new Date().getHours();
       if (data.nightMode == 1 || (data.nightMode == 0 && (h >= 21 || h < 7))) {
         body.classList.add('night-mode');
       } else {
         body.classList.remove('night-mode');
       }
 
-      // 通知表示
-      var rawMsg = data.mode || "";
-      body.classList.remove('show-msg');
-      if (rawMsg !== "通常" && rawMsg !== "") {
-        body.classList.add('show-msg');
-        document.getElementById('message').innerText = rawMsg;
+      // 画面状態のリセット
+      body.classList.remove('gohan-mode', 'ofuro-mode');
+
+      if (mode === "ごはん") {
+        body.classList.add('gohan-mode');
+        mainDisp.innerText = "ごはん\nです";
+      } else if (mode === "お風呂") {
+        body.classList.add('ofuro-mode');
+        mainDisp.innerText = "お風呂\nです";
       }
 
-      // 読み上げ
-      if (!body.classList.contains('night-mode') && rawMsg !== lastMsg && rawMsg !== "" && rawMsg !== "通常") {
-        say(rawMsg === "ごはん" ? "ごはんです" : (rawMsg === "お風呂" ? "お風呂です" : rawMsg));
-        lastMsg = rawMsg;
-      } else if (rawMsg === "通常") {
-        lastMsg = "";
+      // 新しい通知（履歴更新と読み上げ）
+      if (mode !== "通常" && mode !== lastMode) {
+        msgHistory.unshift(mode);
+        msgHistory = msgHistory.slice(0, 3);
+        updateHistoryUI();
+        say(mode === "ごはん" ? "ごはんです" : (mode === "お風呂" ? "お風呂です" : mode));
       }
+      
+      lastMode = mode;
+      updateClock();
     });
 
-    // カメラ機能（再構築）
-    var localStream = null;
-    var streamInterval = null;
+    // カメラ機能
     db.ref('cameraControl').on('value', function(snap) {
-      if (snap.val() === 'ON') { startCamera(); } else { stopCamera(); }
+      if (snap.val() === 'ON') startCamera(); else stopCamera();
     });
-
+    var localStream = null;
     function startCamera() {
-      if (localStream) return;
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
-      .then(function(stream) {
+      navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
         localStream = stream;
-        var v = document.getElementById('localVideo');
-        v.srcObject = stream;
+        document.getElementById('localVideo').srcObject = stream;
         var canvas = document.createElement('canvas');
-        streamInterval = setInterval(function() {
+        setInterval(() => {
           if (!localStream) return;
           canvas.width = 320; canvas.height = 240;
-          canvas.getContext('2d').drawImage(v, 0, 0, canvas.width, canvas.height);
+          canvas.getContext('2d').drawImage(document.getElementById('localVideo'), 0,0,320,240);
           db.ref('cameraData').set({ image: canvas.toDataURL('image/jpeg', 0.5) });
         }, 1000);
-      }).catch(err => console.error("Camera error:", err));
+      });
     }
-
     function stopCamera() {
-      if (streamInterval) clearInterval(streamInterval);
-      if (localStream) {
-        localStream.getTracks().forEach(t => t.stop());
-        localStream = null;
-      }
-      db.ref('cameraData').set({ image: "" });
+      if (localStream) localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
     }
 
-    // 開始
     function userActive() {
       isReady = true;
       document.getElementById('start-button').style.display = 'none';
       var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       audioCtx.resume();
       say("準備完了。");
-      // スリープ防止（最小限）
-      setInterval(() => {
-        if(window.speechSynthesis.speaking) return;
-        var s = new SpeechSynthesisUtterance("");
-        s.volume = 0;
-        window.speechSynthesis.speak(s);
-      }, 15000);
     }
   </script>
 </body>
