@@ -10,7 +10,8 @@
     body { margin: 0; background-color: #f0f0f0; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 10px; }
     .card { width: 100%; max-width: 400px; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; box-sizing: border-box; }
     h2 { font-size: 14px; color: #666; margin: 0 0 10px 0; }
-    .btn { width: 100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; color: white; margin-bottom: 8px; cursor: pointer; }
+    .btn { width: 100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; color: white; margin-bottom: 8px; cursor: pointer; transition: 0.1s; }
+    .btn:active { transform: translateY(2px); opacity: 0.8; }
     .btn-send { background: #444; }
     .btn-gohan { background: #ce0000; width: 48%; }
     .btn-ofuro { background: #2196F3; width: 48%; }
@@ -40,7 +41,7 @@
 
   <div class="card">
     <h2>おしらせ送信</h2>
-    <input type="text" id="custom-message" placeholder="メッセージを入力" style="width:100%; padding:12px; margin-bottom:10px; border:1px solid #ccc; border-radius:8px; box-sizing:border-box;">
+    <input type="text" id="custom-message" placeholder="メッセージを入力" style="width:100%; padding:12px; margin-bottom:10px; border:1px solid #ccc; border-radius:8px; box-sizing:border-box; font-size:16px;">
     <button class="btn btn-send" onclick="sendCustom()">送信</button>
   </div>
 
@@ -53,7 +54,7 @@
   </div>
 
   <div class="card">
-    <h2>夜間モード切替</h2>
+    <h2>夜間モード設定</h2>
     <div class="flex">
       <button class="btn btn-night" style="width:32%" onclick="setNight(1)">強制夜</button>
       <button class="btn btn-day" style="width:32%" onclick="setNight(2)">強制昼</button>
@@ -67,7 +68,7 @@
       databaseURL: "https://info-pane-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "info-pane"
     };
-    firebase.initializeApp(firebaseConfig);
+    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
     var db = firebase.database();
 
     function updateDb(m) { db.ref('currentStatus').update({ mode: m, date: "" }); }
@@ -91,7 +92,7 @@
       var d = snap.val();
       var img = document.getElementById('monitor');
       var ph = document.getElementById('monitor-placeholder');
-      if (d && d.image) {
+      if (d && d.image && d.image !== "") {
         img.src = d.image; img.style.display = 'block'; ph.style.display = 'none';
       } else {
         img.src = ""; img.style.display = 'none'; ph.style.display = 'block';
