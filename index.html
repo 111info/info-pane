@@ -6,24 +6,78 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
-    body { margin: 0; background-color: white; color: black; font-family: sans-serif; transition: 0.5s; overflow: hidden; }
-    #panel { height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
-    #clock { font-size: 12vw; font-weight: 900; color: #333; }
-    #info-date { font-size: 3vw; font-weight: bold; color: #666; margin-top: 20px; }
-    #message { font-size: 8vw; font-weight: 900; margin-top: 5px; padding: 0 40px; line-height: 1.2; }
-    .alert-gohan #clock, .alert-ofuro #clock { display: none; }
-    .alert-gohan #message { font-size: 12vw; color: #d32f2f; }
-    .alert-ofuro #message { font-size: 12vw; color: #2196F3; }
-    .night-mode { background-color: black !important; }
+    /* 土壁に合う落ち着いたベージュ背景 */
+    body { 
+      margin: 0; 
+      background-color: #eaddca; 
+      color: #3e2723; 
+      font-family: "Hiragino Mincho ProN", "serif"; 
+      transition: 0.5s; 
+      overflow: hidden; 
+    }
+
+    #panel { height: 100vh; position: relative; }
+
+    /* 左下の控えめな時計 */
+    #clock-container { 
+      position: absolute; 
+      bottom: 40px; 
+      left: 40px; 
+      text-align: left;
+    }
+    #clock { font-size: 8vw; font-weight: bold; color: #5d4037; opacity: 0.8; }
+    #info-date { font-size: 2vw; color: #795548; }
+
+    /* 右から出てくる大きな通知カード */
+    #message-card { 
+      position: absolute; 
+      top: 10%; 
+      right: -100%; /* 最初は画面の外 */
+      width: 70%; 
+      height: 60%;
+      background: rgba(255, 255, 255, 0.9); 
+      border-radius: 50px; 
+      box-shadow: -10px 10px 30px rgba(0,0,0,0.15);
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      padding: 40px;
+      transition: right 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.1); /* スッと出てくる動き */
+      border: 2px solid #d7ccc8;
+    }
+
+    /* 通知が表示されている時のクラス */
+    .show-msg #message-card { right: 5%; }
+
+    #message { 
+      font-size: 10vw; 
+      font-weight: 900; 
+      text-align: center; 
+      line-height: 1.2;
+    }
+
+    /* 特殊モードの色変更 */
+    .alert-gohan #message-card { background: #fff1f1; border-color: #ffcdd2; }
+    .alert-gohan #message { color: #b71c1c; }
+    .alert-ofuro #message-card { background: #e3f2fd; border-color: #bbdefb; }
+    .alert-ofuro #message { color: #0d47a1; }
+
+    /* 夜間モード */
+    .night-mode { background-color: #000 !important; }
     .night-mode #panel { display: none; }
-    #localVideo { position: fixed; top:0; left:0; width: 1px; height: 1px; opacity: 0; }
+
+    #localVideo { position: fixed; width: 1px; height: 1px; opacity: 0; }
   </style>
 </head>
 <body onclick="userActive()">
   <div id="panel">
-    <div id="clock">00:00</div>
-    <div id="info-date"></div>
-    <div id="message">準備中...</div>
+    <div id="clock-container">
+      <div id="info-date"></div>
+      <div id="clock">00:00</div>
+    </div>
+    <div id="message-card">
+      <div id="message">準備中</div>
+    </div>
   </div>
   <video id="localVideo" autoplay playsinline muted></video>
 
@@ -35,14 +89,11 @@
     };
     if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
     var db = firebase.database();
+    var lastMsg = "";
 
-    var isNight = false;
-    var streamInterval = null;
-    var localStream = null;
-
-    // 時計
+    // 時計更新
     setInterval(function() {
-      if (isNight) return;
+      if (document.body.classList.contains('night-mode')) return;
       var now = new Date();
       document.getElementById('clock').innerText = now.getHours() + ":" + ("0" + now.getMinutes()).slice(-2);
     }, 1000);
@@ -51,23 +102,40 @@
     db.ref('currentStatus').on('value', function(snap) {
       var data = snap.val();
       if (!data) return;
+      var body = document.body;
       var h = new Date().getHours();
-      var nm = data.nightMode || 0;
-      if (nm == 1 || (nm == 0 && (h >= 21 || h < 7))) {
-        isNight = true; document.body.classList.add('night-mode');
+      
+      // 夜間モード
+      if (data.nightMode == 1 || (data.nightMode == 0 && (h >= 21 || h < 7))) {
+        body.classList.add('night-mode');
       } else {
-        isNight = false; document.body.classList.remove('night-mode');
+        body.classList.remove('night-mode');
       }
-      document.body.classList.remove('alert-gohan', 'alert-ofuro');
+
+      // 表示切り替え
+      body.classList.remove('alert-gohan', 'alert-ofuro', 'show-msg');
+      var displayMsg = "";
+      
       if (data.mode === 'ごはん') {
-        document.body.classList.add('alert-gohan');
-        document.getElementById('message').innerText = "ごはんです";
+        body.classList.add('alert-gohan', 'show-msg');
+        displayMsg = "ごはんです";
       } else if (data.mode === 'お風呂') {
-        document.body.classList.add('alert-ofuro');
-        document.getElementById('message').innerText = "お風呂です";
-      } else {
-        document.getElementById('message').innerText = data.mode || "おしらせはありません";
+        body.classList.add('alert-ofuro', 'show-msg');
+        displayMsg = "お風呂です";
+      } else if (data.mode !== "通常") {
+        body.classList.add('show-msg');
+        displayMsg = data.mode;
         document.getElementById('info-date').innerText = data.date || "";
+      }
+
+      document.getElementById('message').innerText = displayMsg;
+
+      // 音声読み上げ
+      if (!body.classList.contains('night-mode') && displayMsg !== lastMsg && displayMsg !== "") {
+        say(displayMsg);
+        lastMsg = displayMsg;
+      } else if (data.mode === "通常") {
+        lastMsg = "";
       }
     });
 
@@ -76,6 +144,7 @@
       if (snap.val() === 'ON') { startCamera(); } else { stopCamera(); }
     });
 
+    var localStream = null; var streamInterval = null;
     function startCamera() {
       if (localStream) return;
       navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
@@ -89,23 +158,28 @@
           canvas.getContext('2d').drawImage(v, 0, 0, canvas.width, canvas.height);
           db.ref('cameraData').set({ image: canvas.toDataURL('image/jpeg', 0.5) });
         }, 800);
-      }).catch(function(e){ console.log(e); });
+      });
     }
 
     function stopCamera() {
       if (streamInterval) clearInterval(streamInterval);
-      if (localStream) {
-        localStream.getTracks().forEach(function(t) { t.stop(); });
-        localStream = null;
-      }
-      db.ref('cameraData').set({ image: "" }); // 画像を空にする
+      if (localStream) { localStream.getTracks().forEach(function(t) { t.stop(); }); localStream = null; }
+      db.ref('cameraData').set({ image: "" });
+    }
+
+    function say(txt) {
+      if (!window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      var uttr = new SpeechSynthesisUtterance(txt);
+      uttr.lang = "ja-JP";
+      uttr.rate = 0.85; 
+      window.speechSynthesis.speak(uttr);
     }
 
     function userActive() {
-      try {
-        var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        audioCtx.resume();
-      } catch(e){}
+      var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      audioCtx.resume();
+      say("準備完了");
     }
   </script>
 </body>
