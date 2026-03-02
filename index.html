@@ -17,38 +17,37 @@
     .night-mode { background-color: black !important; }
     .night-mode #panel { display: none; }
     #localVideo { position: fixed; top:0; left:0; width: 1px; height: 1px; opacity: 0; }
-    #debug-log { position: fixed; bottom: 0; left: 0; font-size: 10px; color: #ccc; }
   </style>
 </head>
 <body onclick="userActive()">
   <div id="panel">
     <div id="clock">00:00</div>
     <div id="info-date"></div>
-    <div id="message">読み込み中...</div>
+    <div id="message">準備中...</div>
   </div>
   <video id="localVideo" autoplay playsinline muted></video>
-  <div id="debug-log">Ready</div>
 
   <script>
-    function log(msg) { document.getElementById('debug-log').innerText = msg; }
     var firebaseConfig = {
       apiKey: "AIzaSyAP10nWUJqwlv-9yNtbMB6iBsawb44wn2A",
       databaseURL: "https://info-pane-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "info-pane"
     };
-    firebase.initializeApp(firebaseConfig);
+    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
     var db = firebase.database();
 
     var isNight = false;
     var streamInterval = null;
     var localStream = null;
 
+    // 時計
     setInterval(function() {
       if (isNight) return;
       var now = new Date();
       document.getElementById('clock').innerText = now.getHours() + ":" + ("0" + now.getMinutes()).slice(-2);
     }, 1000);
 
+    // 状態受信
     db.ref('currentStatus').on('value', function(snap) {
       var data = snap.val();
       if (!data) return;
@@ -72,8 +71,9 @@
       }
     });
 
+    // カメラ
     db.ref('cameraControl').on('value', function(snap) {
-      if (snap.val() === 'ON') startCamera(); else stopCamera();
+      if (snap.val() === 'ON') { startCamera(); } else { stopCamera(); }
     });
 
     function startCamera() {
@@ -81,15 +81,15 @@
       navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
       .then(function(stream) {
         localStream = stream;
-        document.getElementById('localVideo').srcObject = stream;
+        var v = document.getElementById('localVideo');
+        v.srcObject = stream;
         var canvas = document.createElement('canvas');
-        var video = document.getElementById('localVideo');
         streamInterval = setInterval(function() {
           canvas.width = 320; canvas.height = 240;
-          canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+          canvas.getContext('2d').drawImage(v, 0, 0, canvas.width, canvas.height);
           db.ref('cameraData').set({ image: canvas.toDataURL('image/jpeg', 0.5) });
         }, 800);
-      });
+      }).catch(function(e){ console.log(e); });
     }
 
     function stopCamera() {
@@ -98,14 +98,14 @@
         localStream.getTracks().forEach(function(t) { t.stop(); });
         localStream = null;
       }
-      // 【修正ポイント】ここでFirebase上の画像を完全に消去する
-      db.ref('cameraData').set({ image: "" });
+      db.ref('cameraData').set({ image: "" }); // 画像を空にする
     }
 
     function userActive() {
-      var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      audioCtx.resume();
-      log("Active");
+      try {
+        var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioCtx.resume();
+      } catch(e){}
     }
   </script>
 </body>
