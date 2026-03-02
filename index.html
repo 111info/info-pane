@@ -2,23 +2,26 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>ひなたアシスタント</title>
+  <title>家族パネル・子機</title>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
     body { 
       margin: 0; background-color: #eaddca; color: #3e2723; 
-      font-family: "Hiragino Kaku Gothic ProN", sans-serif; 
+      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif; 
       transition: 0.5s; overflow: hidden; touch-action: manipulation;
     }
-    /* 開始ボタン（確実に反応させる） */
+    /* 開始ボタン */
     #start-button {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: #4e342e; color: white; display: flex;
       flex-direction: column; justify-content: center; align-items: center;
       z-index: 10000; border: none; font-size: 6vw; font-weight: bold;
     }
+
     #container { display: flex; flex-direction: column; width: 100vw; height: 100vh; padding: 20px; box-sizing: border-box; }
+    
+    /* 上側：お知らせ（45%） */
     #notice-section { flex: 0 0 45%; display: flex; align-items: center; justify-content: center; }
     #message-card { 
       width: 95%; height: 90%; background: rgba(255, 255, 255, 0.96); 
@@ -30,18 +33,20 @@
     .show-msg #message-card { opacity: 1; transform: translateY(0); }
     #message { font-size: 8vw; font-weight: 900; text-align: center; line-height: 1.25; color: #212121; }
     
+    /* 下側：時計（55%・枠なし） */
     #clock-section { flex: 0 0 55%; display: flex; flex-direction: column; justify-content: center; align-items: center; }
     #info-date { font-size: 4.5vw; font-weight: bold; color: #795548; margin-bottom: 5px; }
     #clock { font-size: 24vw; font-weight: 900; line-height: 1; color: #4e342e; }
     
-    #localVideo { position: fixed; width: 1px; height: 1px; opacity: 0; }
+    /* 夜間モード */
+    .night-mode { background-color: #000 !important; }
+    .night-mode #container { display: none !important; }
+
+    #localVideo { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
   </style>
 </head>
 <body>
-  <button id="start-button" onclick="userActive()">
-    画面をタップしてください
-    <div style="font-size:3vw; margin-top:20px;">「ひなた」と呼ぶと反応します</div>
-  </button>
+  <button id="start-button" onclick="userActive()">画面をタップして開始</button>
 
   <div id="container">
     <div id="notice-section">
@@ -54,7 +59,6 @@
   </div>
   
   <video id="localVideo" autoplay playsinline muted></video>
-  <audio id="dummy-audio" loop><source src="data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==" type="audio/wav"></audio>
 
   <script>
     var firebaseConfig = {
@@ -77,88 +81,94 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // 音声読み上げ
+    // 音声読み上げ（シンプル版）
     function say(txt) {
       if (!isReady || !txt) return;
       window.speechSynthesis.cancel();
       var uttr = new SpeechSynthesisUtterance(txt);
       uttr.lang = "ja-JP";
-      uttr.rate = 0.9; 
-      uttr.pitch = 1.1;
+      uttr.rate = 0.9;
       window.speechSynthesis.speak(uttr);
     }
 
-    // ★ひなたアシスタントの知能（シンプル版）
-    function hinataAssistant(text) {
-      if (text === "ごはん") return "ごはんです。";
-      if (text === "お風呂") return "お風呂です。";
-      if (text.includes("何時") || text.includes("いま")) {
-        var now = new Date();
-        return "現在は" + now.getHours() + "時" + now.getMinutes() + "分です。";
-      }
-      return text;
-    }
-
-    // 音声認識（呼びかけ待機）
-    function startListening() {
-      var Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!Recognition) return;
-      var rec = new Recognition();
-      rec.lang = "ja-JP";
-      rec.continuous = false; // iPadの安定性のために1回ずつ区切る
-
-      rec.onresult = function(event) {
-        var result = event.results[0][0].transcript;
-        if (result.includes("ひなた")) {
-          say("はい、ひなたです。");
-        } else if (result.includes("何時") || result.includes("時間")) {
-            say(hinataAssistant("何時"));
-        }
-      };
-
-      // 止まったら即座に再起動して「常時待機」を模倣
-      rec.onend = function() { rec.start(); }; 
-      rec.onerror = function() { setTimeout(function(){ rec.start(); }, 1000); };
-      rec.start();
-    }
-
-    // Firebase受信
+    // メインロジック（通知・夜間モード）
     db.ref('currentStatus').on('value', function(snap) {
       var data = snap.val();
       if (!data) return;
-      var rawMsg = data.mode || "";
-      var displayMsg = hinataAssistant(rawMsg);
-
       var body = document.body;
-      body.classList.remove('show-msg');
-      if (rawMsg !== "通常" && rawMsg !== "") body.classList.add('show-msg');
-      document.getElementById('message').innerText = rawMsg === "通常" ? "" : rawMsg;
+      var h = new Date().getHours();
+      
+      // 夜間モード判定
+      if (data.nightMode == 1 || (data.nightMode == 0 && (h >= 21 || h < 7))) {
+        body.classList.add('night-mode');
+      } else {
+        body.classList.remove('night-mode');
+      }
 
-      if (displayMsg !== lastMsg && displayMsg !== "") {
-        say(displayMsg);
-        lastMsg = displayMsg;
+      // 通知表示
+      var rawMsg = data.mode || "";
+      body.classList.remove('show-msg');
+      if (rawMsg !== "通常" && rawMsg !== "") {
+        body.classList.add('show-msg');
+        document.getElementById('message').innerText = rawMsg;
+      }
+
+      // 読み上げ
+      if (!body.classList.contains('night-mode') && rawMsg !== lastMsg && rawMsg !== "" && rawMsg !== "通常") {
+        say(rawMsg === "ごはん" ? "ごはんです" : (rawMsg === "お風呂" ? "お風呂です" : rawMsg));
+        lastMsg = rawMsg;
       } else if (rawMsg === "通常") {
         lastMsg = "";
       }
     });
 
-    // システム開始
+    // カメラ機能（再構築）
+    var localStream = null;
+    var streamInterval = null;
+    db.ref('cameraControl').on('value', function(snap) {
+      if (snap.val() === 'ON') { startCamera(); } else { stopCamera(); }
+    });
+
+    function startCamera() {
+      if (localStream) return;
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+      .then(function(stream) {
+        localStream = stream;
+        var v = document.getElementById('localVideo');
+        v.srcObject = stream;
+        var canvas = document.createElement('canvas');
+        streamInterval = setInterval(function() {
+          if (!localStream) return;
+          canvas.width = 320; canvas.height = 240;
+          canvas.getContext('2d').drawImage(v, 0, 0, canvas.width, canvas.height);
+          db.ref('cameraData').set({ image: canvas.toDataURL('image/jpeg', 0.5) });
+        }, 1000);
+      }).catch(err => console.error("Camera error:", err));
+    }
+
+    function stopCamera() {
+      if (streamInterval) clearInterval(streamInterval);
+      if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+        localStream = null;
+      }
+      db.ref('cameraData').set({ image: "" });
+    }
+
+    // 開始
     function userActive() {
       isReady = true;
       document.getElementById('start-button').style.display = 'none';
       var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       audioCtx.resume();
-      document.getElementById('dummy-audio').play();
-      
-      say("ひなた、準備できました。");
-      startListening(); 
-
-      // Speechエンジンを眠らせない
-      setInterval(function() {
-        var silence = new SpeechSynthesisUtterance("");
-        silence.volume = 0;
-        window.speechSynthesis.speak(silence);
-      }, 10000);
+      say("準備完了。");
+      // スリープ防止（最小限）
+      setInterval(() => {
+        if(window.speechSynthesis.speaking) return;
+        var s = new SpeechSynthesisUtterance("");
+        s.volume = 0;
+        window.speechSynthesis.speak(s);
+      }, 15000);
     }
   </script>
 </body>
