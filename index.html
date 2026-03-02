@@ -6,77 +6,113 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
-    /* 土壁に合う落ち着いたベージュ背景 */
+    /* 全体：UDフォントと土壁カラー */
     body { 
       margin: 0; 
       background-color: #eaddca; 
       color: #3e2723; 
-      font-family: "Hiragino Mincho ProN", "serif"; 
+      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif; 
       transition: 0.5s; 
-      overflow: hidden; 
+      overflow: hidden;
     }
 
-    #panel { height: 100vh; position: relative; }
-
-    /* 左下の控えめな時計 */
-    #clock-container { 
-      position: absolute; 
-      bottom: 40px; 
-      left: 40px; 
-      text-align: left;
+    #container {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+      align-items: center;
     }
-    #clock { font-size: 8vw; font-weight: bold; color: #5d4037; opacity: 0.8; }
-    #info-date { font-size: 2vw; color: #795548; }
 
-    /* 右から出てくる大きな通知カード */
+    /* 左側 60%：時計エリア（絶対に被らない） */
+    #clock-section {
+      flex: 0 0 60%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding-left: 40px;
+      box-sizing: border-box;
+    }
+
+    #info-date { 
+      font-size: 3.5vw; 
+      font-weight: bold; 
+      color: #795548;
+      margin-bottom: 5px;
+    }
+
+    #clock { 
+      font-size: 18vw; 
+      font-weight: 900; 
+      line-height: 1;
+      letter-spacing: -2px;
+      color: #4e342e;
+    }
+
+    /* 右側 40%：通知エリア */
+    #notice-section {
+      flex: 0 0 40%;
+      height: 100%;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* 右からスライドしてくる通知カード */
     #message-card { 
-      position: absolute; 
-      top: 10%; 
-      right: -100%; /* 最初は画面の外 */
-      width: 70%; 
-      height: 60%;
-      background: rgba(255, 255, 255, 0.9); 
-      border-radius: 50px; 
+      position: absolute;
+      right: -110%; /* 通常時は画面外 */
+      width: 90%;
+      height: 85%;
+      background: rgba(255, 255, 255, 0.95); 
+      border-radius: 40px; 
       box-shadow: -10px 10px 30px rgba(0,0,0,0.15);
       display: flex; 
       justify-content: center; 
       align-items: center; 
-      padding: 40px;
-      transition: right 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.1); /* スッと出てくる動き */
-      border: 2px solid #d7ccc8;
+      padding: 30px;
+      box-sizing: border-box;
+      transition: right 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+      border: 3px solid #d7ccc8;
     }
 
-    /* 通知が表示されている時のクラス */
-    .show-msg #message-card { right: 5%; }
+    /* 通知がある時だけスライドイン */
+    .show-msg #message-card { 
+      right: 20px; 
+    }
 
     #message { 
-      font-size: 10vw; 
+      font-size: 6.5vw; 
       font-weight: 900; 
       text-align: center; 
-      line-height: 1.2;
+      line-height: 1.4;
+      color: #212121;
     }
 
-    /* 特殊モードの色変更 */
-    .alert-gohan #message-card { background: #fff1f1; border-color: #ffcdd2; }
-    .alert-gohan #message { color: #b71c1c; }
-    .alert-ofuro #message-card { background: #e3f2fd; border-color: #bbdefb; }
-    .alert-ofuro #message { color: #0d47a1; }
+    /* 特殊モード */
+    .alert-gohan #message-card { background: #fff8f8; border-color: #ff8a80; }
+    .alert-gohan #message { color: #d32f2f; }
+    .alert-ofuro #message-card { background: #f0f8ff; border-color: #82b1ff; }
+    .alert-ofuro #message { color: #1976d2; }
 
     /* 夜間モード */
     .night-mode { background-color: #000 !important; }
-    .night-mode #panel { display: none; }
+    .night-mode #container { display: none; }
 
     #localVideo { position: fixed; width: 1px; height: 1px; opacity: 0; }
   </style>
 </head>
 <body onclick="userActive()">
-  <div id="panel">
-    <div id="clock-container">
+  <div id="container">
+    <div id="clock-section">
       <div id="info-date"></div>
       <div id="clock">00:00</div>
     </div>
-    <div id="message-card">
-      <div id="message">準備中</div>
+    <div id="notice-section">
+      <div id="message-card">
+        <div id="message">準備中</div>
+      </div>
     </div>
   </div>
   <video id="localVideo" autoplay playsinline muted></video>
@@ -91,28 +127,24 @@
     var db = firebase.database();
     var lastMsg = "";
 
-    // 時計更新
     setInterval(function() {
       if (document.body.classList.contains('night-mode')) return;
       var now = new Date();
       document.getElementById('clock').innerText = now.getHours() + ":" + ("0" + now.getMinutes()).slice(-2);
     }, 1000);
 
-    // 状態受信
     db.ref('currentStatus').on('value', function(snap) {
       var data = snap.val();
       if (!data) return;
       var body = document.body;
       var h = new Date().getHours();
       
-      // 夜間モード
       if (data.nightMode == 1 || (data.nightMode == 0 && (h >= 21 || h < 7))) {
         body.classList.add('night-mode');
       } else {
         body.classList.remove('night-mode');
       }
 
-      // 表示切り替え
       body.classList.remove('alert-gohan', 'alert-ofuro', 'show-msg');
       var displayMsg = "";
       
@@ -122,7 +154,7 @@
       } else if (data.mode === 'お風呂') {
         body.classList.add('alert-ofuro', 'show-msg');
         displayMsg = "お風呂です";
-      } else if (data.mode !== "通常") {
+      } else if (data.mode !== "通常" && data.mode !== "") {
         body.classList.add('show-msg');
         displayMsg = data.mode;
         document.getElementById('info-date').innerText = data.date || "";
@@ -130,7 +162,6 @@
 
       document.getElementById('message').innerText = displayMsg;
 
-      // 音声読み上げ
       if (!body.classList.contains('night-mode') && displayMsg !== lastMsg && displayMsg !== "") {
         say(displayMsg);
         lastMsg = displayMsg;
@@ -139,7 +170,6 @@
       }
     });
 
-    // カメラ
     db.ref('cameraControl').on('value', function(snap) {
       if (snap.val() === 'ON') { startCamera(); } else { stopCamera(); }
     });
