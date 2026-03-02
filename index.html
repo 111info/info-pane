@@ -9,8 +9,17 @@
     body { 
       margin: 0; background-color: #eaddca; color: #3e2723; 
       font-family: "Hiragino Kaku Gothic ProN", sans-serif; 
-      transition: 0.5s; overflow: hidden;
+      transition: 0.5s; overflow: hidden; touch-action: manipulation;
     }
+    /* 開始ボタン（画面全体を覆い、確実に押せるように） */
+    #start-button {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #4e342e; color: white; display: flex;
+      flex-direction: column; justify-content: center; align-items: center;
+      z-index: 10000; border: none; font-size: 6vw; font-weight: bold;
+    }
+    #start-button span { font-size: 3vw; margin-top: 20px; opacity: 0.8; }
+
     #container { display: flex; flex-direction: column; width: 100vw; height: 100vh; padding: 20px; box-sizing: border-box; }
     #notice-section { flex: 0 0 45%; display: flex; align-items: center; justify-content: center; }
     #message-card { 
@@ -25,24 +34,17 @@
     #clock-section { flex: 0 0 55%; display: flex; flex-direction: column; justify-content: center; align-items: center; }
     #info-date { font-size: 4.5vw; font-weight: bold; color: #795548; margin-bottom: 5px; }
     #clock { font-size: 22vw; font-weight: 900; line-height: 1; color: #4e342e; }
-    .alert-gohan #message-card { background: #fffcfc; border-color: #ff8a80; }
-    .alert-gohan #message { color: #d32f2f; font-size: 10vw; }
-    .alert-ofuro #message-card { background: #fcfdff; border-color: #82b1ff; }
-    .alert-ofuro #message { color: #1976d2; font-size: 10vw; }
+    
     .night-mode { background-color: #000 !important; }
     .night-mode #container { display: none; }
     #localVideo { position: fixed; width: 1px; height: 1px; opacity: 0; }
-    /* 開始を促すオーバーレイ */
-    #start-overlay {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.8); color: white; display: flex;
-      justify-content: center; align-items: center; z-index: 9999;
-      font-size: 5vw; font-weight: bold; text-align: center;
-    }
   </style>
 </head>
-<body onclick="userActive()">
-  <div id="start-overlay">画面をタップして<br>システムを開始してください</div>
+<body>
+  <button id="start-button" onclick="userActive()">
+    ここを一度タップしてください
+    <span>システムを開始します</span>
+  </button>
 
   <div id="container">
     <div id="notice-section">
@@ -55,6 +57,7 @@
   </div>
   
   <video id="localVideo" autoplay playsinline muted></video>
+  <audio id="dummy-audio" loop><source src="data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==" type="audio/wav"></audio>
 
   <script>
     var firebaseConfig = {
@@ -71,32 +74,21 @@
     function updateClock() {
       if (document.body.classList.contains('night-mode')) return;
       var now = new Date();
-      var m = now.getMonth() + 1;
-      var d = now.getDate();
       var dayList = ["日", "月", "火", "水", "木", "金", "土"];
-      document.getElementById('info-date').innerText = m + "月" + d + "日 (" + dayList[now.getDay()] + ")";
+      document.getElementById('info-date').innerText = (now.getMonth() + 1) + "月" + now.getDate() + "日 (" + dayList[now.getDay()] + ")";
       document.getElementById('clock').innerText = now.getHours() + ":" + ("0" + now.getMinutes()).slice(-2);
     }
     setInterval(updateClock, 1000);
     updateClock();
 
-    // 音声読み上げ本体 (iOS 12のキュー管理に対応)
+    // 音声読み上げ
     function say(txt) {
-      if (!isReady || !window.speechSynthesis) return;
-      window.speechSynthesis.cancel(); // 進行中の音声を強制停止
+      if (!isReady) return;
+      window.speechSynthesis.cancel();
       var uttr = new SpeechSynthesisUtterance(txt);
       uttr.lang = "ja-JP";
       uttr.rate = 0.85;
-      uttr.volume = 1.0;
       window.speechSynthesis.speak(uttr);
-    }
-
-    // ★重要★ スピーカーを眠らせないための「無音」再生
-    function keepAlive() {
-      if (!isReady) return;
-      var silence = new SpeechSynthesisUtterance("");
-      silence.volume = 0;
-      window.speechSynthesis.speak(silence);
     }
 
     // データ受信
@@ -114,7 +106,6 @@
 
       body.classList.remove('alert-gohan', 'alert-ofuro', 'show-msg');
       var displayMsg = "";
-      var msgElement = document.getElementById('message');
       
       if (data.mode === 'ごはん') {
         body.classList.add('alert-gohan', 'show-msg');
@@ -126,15 +117,8 @@
         body.classList.add('show-msg');
         displayMsg = data.mode;
       }
+      document.getElementById('message').innerText = displayMsg;
 
-      msgElement.innerText = displayMsg;
-
-      // 文字サイズ調整
-      if (displayMsg.length > 20) msgElement.style.fontSize = "5vw";
-      else if (displayMsg.length > 10) msgElement.style.fontSize = "6vw";
-      else msgElement.style.fontSize = "7.5vw";
-
-      // 音声
       if (!body.classList.contains('night-mode') && displayMsg !== lastMsg && displayMsg !== "") {
         say(displayMsg);
         lastMsg = displayMsg;
@@ -143,22 +127,31 @@
       }
     });
 
-    // ユーザーのアクションで音声を解禁
+    // ★音声解禁のための重要処理
     function userActive() {
-      if (isReady) return;
       isReady = true;
-      document.getElementById('start-overlay').style.display = 'none';
+      document.getElementById('start-button').style.display = 'none';
       
-      // iOSのWebAudioコンテキストも解禁
+      // 1. AudioContextを再開
       var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       audioCtx.resume();
       
+      // 2. ダミーの無音ループ再生を開始（スピーカーをアクティブに保つ）
+      var dummy = document.getElementById('dummy-audio');
+      dummy.play().catch(function(e){ console.log(e); });
+      
+      // 3. 確認の読み上げ
       say("システムを開始しました。");
-      // 15秒おきにスリープ防止を実行
-      setInterval(keepAlive, 15000);
+
+      // 4. 定期的に無音を喋らせてSpeechエンジンが寝るのを防ぐ
+      setInterval(function() {
+        var silence = new SpeechSynthesisUtterance("");
+        silence.volume = 0;
+        window.speechSynthesis.speak(silence);
+      }, 10000);
     }
 
-    // カメラ機能
+    // カメラ
     db.ref('cameraControl').on('value', function(snap) {
       if (snap.val() === 'ON') { startCamera(); } else { stopCamera(); }
     });
