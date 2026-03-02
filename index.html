@@ -19,33 +19,17 @@
 
     #main-wrapper { display: flex; width: 100vw; height: 100vh; padding: 25px; box-sizing: border-box; }
 
-    /* 左：メイン表示 */
+    /* 左：メイン（時計 ＆ ごはん・お風呂専用） */
     #left-panel {
       flex: 1.3; background: rgba(255,255,255,0.4); border-radius: 50px;
       display: flex; flex-direction: column; justify-content: center; align-items: center;
       margin-right: 25px; border: 2px solid rgba(255,255,255,0.5);
-      transition: all 0.5s ease; padding: 20px; position: relative;
+      transition: all 0.5s ease; padding: 20px;
     }
-    #main-display { font-size: 11vw; font-weight: 900; text-align: center; line-height: 1.2; white-space: pre-wrap; transition: 0.3s; }
+    #main-display { font-size: 16vw; font-weight: 900; text-align: center; line-height: 1.2; white-space: pre-wrap; }
     #sub-date { font-size: 5vw; font-weight: bold; margin-top: 20px; color: #795548; }
 
-    /* ロードマーク */
-    #loader {
-      display: none; width: 80px; height: 80px;
-      border: 10px solid #d7ccc8; border-top: 10px solid #4e342e;
-      border-radius: 50%; animation: spin 1s linear infinite;
-      position: absolute;
-    }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-    /* 通知アニメーション */
-    .fade-in { animation: fadeInUp 0.8s ease forwards; }
-    @keyframes fadeInUp {
-      from { opacity: 0; transform: translateY(30px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* 右：お知らせ履歴 */
+    /* 右：お知らせ履歴（自由入力の通知はここでロード） */
     #right-panel { flex: 1; display: flex; flex-direction: column; }
     #history-title { font-size: 4vw; font-weight: 900; margin-bottom: 15px; padding-left: 10px; }
     
@@ -53,12 +37,27 @@
       background: rgba(255,255,255,0.8); border-radius: 30px; margin-bottom: 15px;
       padding: 15px; display: flex; align-items: center; justify-content: center;
       box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 2px solid #d7ccc8;
-      text-align: center; font-weight: bold; transition: 0.5s;
+      text-align: center; font-weight: bold; transition: 0.5s; position: relative; min-height: 80px;
     }
     
     #hist-0 { flex: 1.2; background: #fff; color: #3e2723; } 
     #hist-1 { flex: 1.0; opacity: 0.7; }
     #hist-2 { flex: 0.8; opacity: 0.5; }
+
+    /* ミニ・ロードマーク */
+    .mini-loader {
+      display: none; width: 40px; height: 40px;
+      border: 6px solid #d7ccc8; border-top: 6px solid #4e342e;
+      border-radius: 50%; animation: spin 1s linear infinite;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    /* 通知アニメーション */
+    .fade-in { animation: fadeInUp 0.8s ease forwards; }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
 
     .gohan-mode #left-panel { background-color: #ffeb3b; border-color: #fbc02d; color: #bf360c; }
     .ofuro-mode #left-panel { background-color: #bbdefb; border-color: #64b5f6; color: #0d47a1; }
@@ -72,15 +71,14 @@
 
   <div id="main-wrapper">
     <div id="left-panel">
-      <div id="loader"></div>
       <div id="main-display">00:00</div>
       <div id="sub-date">--月--日 (曜)</div>
     </div>
     <div id="right-panel">
       <div id="history-title">通知</div>
-      <div id="hist-0" class="history-card">-</div>
-      <div id="hist-1" class="history-card">-</div>
-      <div id="hist-2" class="history-card">-</div>
+      <div id="hist-0" class="history-card"><div class="mini-loader" id="card-loader"></div><span id="hist-text-0">-</span></div>
+      <div id="hist-1" class="history-card"><span id="hist-text-1">-</span></div>
+      <div id="hist-2" class="history-card"><span id="hist-text-2">-</span></div>
     </div>
   </div>
 
@@ -97,10 +95,8 @@
     var isReady = false;
     var lastMode = "";
     var msgHistory = ["-", "-", "-"];
-    var isLocked = false; // ロード中フラグ
 
     function updateClock() {
-      if (isLocked) return;
       var now = new Date();
       var dayList = ["日", "月", "火", "水", "木", "金", "土"];
       document.getElementById('sub-date').innerText = (now.getMonth() + 1) + "月" + now.getDate() + "日 (" + dayList[now.getDay()] + ")";
@@ -112,9 +108,7 @@
     setInterval(updateClock, 1000);
 
     function adjustReading(txt) {
-      return txt.replace(/行ってきます/g, "いってきます")
-                .replace(/行ってらっしゃい/g, "いってらっしゃい")
-                .replace(/ご飯/g, "ごはん");
+      return txt.replace(/行ってきます/g, "いってきます").replace(/行ってらっしゃい/g, "いってらっしゃい").replace(/ご飯/g, "ごはん");
     }
 
     function say(txt) {
@@ -134,48 +128,14 @@
       element.innerText = text;
     }
 
-    // 表示処理を関数化
-    function applyNotification(mode) {
-      var body = document.body;
-      var mainDisp = document.getElementById('main-display');
-      
-      mainDisp.style.opacity = "1";
-      mainDisp.classList.remove("fade-in");
-      void mainDisp.offsetWidth;
-      mainDisp.classList.add("fade-in");
-
-      body.classList.remove('gohan-mode', 'ofuro-mode');
-      if (mode === "ごはん") {
-        body.classList.add('gohan-mode');
-        mainDisp.innerText = "ごはん\nです";
-        mainDisp.style.fontSize = "11vw";
-      } else if (mode === "お風呂") {
-        body.classList.add('ofuro-mode');
-        mainDisp.innerText = "お風呂\nです";
-        mainDisp.style.fontSize = "11vw";
-      } else {
-        mainDisp.innerText = mode;
-      }
-
-      // 履歴更新と発話
-      msgHistory.unshift(mode);
-      msgHistory = msgHistory.slice(0, 3);
-      setAdaptiveFontSize(document.getElementById('hist-0'), msgHistory[0], 5);
-      setAdaptiveFontSize(document.getElementById('hist-1'), msgHistory[1], 3.5);
-      setAdaptiveFontSize(document.getElementById('hist-2'), msgHistory[2], 2.5);
-      
-      say(mode === "ごはん" ? "ごはんです" : (mode === "お風呂" ? "お風呂です" : mode));
-      lastMode = mode;
-      isLocked = false;
-    }
-
     db.ref('currentStatus').on('value', function(snap) {
       var data = snap.val();
       if (!data) return;
       var mode = data.mode || "通常";
       var body = document.body;
       var mainDisp = document.getElementById('main-display');
-      var loader = document.getElementById('loader');
+      var loader = document.getElementById('card-loader');
+      var histText0 = document.getElementById('hist-text-0');
 
       // 夜間モード
       var h = new Date().getHours();
@@ -186,18 +146,41 @@
       }
 
       if (mode !== "通常" && mode !== lastMode) {
-        // ★ここから分岐
+        // パターンA: ごはん・お風呂（左側のみ・即時・履歴なし）
         if (mode === "ごはん" || mode === "お風呂") {
-          // ロードなしで即表示
-          applyNotification(mode);
-        } else {
-          // その他の通知は5秒ロード
-          isLocked = true;
-          mainDisp.style.opacity = "0";
+          body.classList.remove('gohan-mode', 'ofuro-mode');
+          if (mode === "ごはん") {
+            body.classList.add('gohan-mode');
+            mainDisp.innerText = "ごはん\nです";
+            mainDisp.style.fontSize = "11vw";
+          } else {
+            body.classList.add('ofuro-mode');
+            mainDisp.innerText = "お風呂\nです";
+            mainDisp.style.fontSize = "11vw";
+          }
+          say(mode === "ごはん" ? "ごはんです" : "お風呂です");
+          lastMode = mode;
+        } 
+        // パターンB: お知らせ（右側のみ・5秒ロード・履歴あり）
+        else {
+          histText0.style.display = "none";
           loader.style.display = "block";
+          
           setTimeout(function() {
             loader.style.display = "none";
-            applyNotification(mode);
+            histText0.style.display = "inline";
+            histText0.classList.remove("fade-in");
+            void histText0.offsetWidth;
+            histText0.classList.add("fade-in");
+
+            msgHistory.unshift(mode);
+            msgHistory = msgHistory.slice(0, 3);
+            setAdaptiveFontSize(document.getElementById('hist-text-0'), msgHistory[0], 5);
+            setAdaptiveFontSize(document.getElementById('hist-text-1'), msgHistory[1], 3.5);
+            setAdaptiveFontSize(document.getElementById('hist-text-2'), msgHistory[2], 2.5);
+            
+            say(mode);
+            lastMode = mode;
           }, 5000);
         }
       } else if (mode === "通常") {
@@ -207,7 +190,7 @@
       }
     });
 
-    // カメラ
+    // カメラ機能
     db.ref('cameraControl').on('value', function(snap) {
       if (snap.val() === 'ON') startCamera(); else stopCamera();
     });
