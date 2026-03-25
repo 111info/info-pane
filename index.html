@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>インフォメーションパネル</title>
+  <title>家族パネル - 子機</title>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
@@ -11,13 +11,27 @@
       font-family: "Hiragino Kaku Gothic ProN", sans-serif; 
       transition: 0.5s; overflow: hidden; touch-action: manipulation;
     }
-    #start-button {
+
+    /* 1. 認証画面（起動時に表示） */
+    #auth-screen {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: #4e342e; color: white; display: flex;
-      justify-content: center; align-items: center; z-index: 10000; border: none; font-size: 5vw;
+      background: #4e342e; color: white; display: flex; flex-direction: column;
+      justify-content: center; align-items: center; z-index: 20000;
+    }
+    #auth-screen h2 { font-size: 5vw; margin-bottom: 30px; letter-spacing: 2px; }
+    #pass-input { 
+      font-size: 32px; padding: 15px; width: 280px; border-radius: 20px; 
+      border: 3px solid #8d6e63; text-align: center; margin-bottom: 25px;
+      outline: none; background: #fff;
+    }
+    #login-btn {
+      font-size: 24px; padding: 12px 50px; border-radius: 50px;
+      border: none; background: #d7ccc8; color: #4e342e; font-weight: bold;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3); cursor: pointer;
     }
 
-    #main-wrapper { display: flex; width: 100vw; height: 100vh; padding: 25px; box-sizing: border-box; }
+    /* メイン画面（認証後に表示） */
+    #main-wrapper { display: none; width: 100vw; height: 100vh; padding: 25px; box-sizing: border-box; }
 
     /* 左：メイン（時計 ＆ ごはん・お風呂専用） */
     #left-panel {
@@ -29,7 +43,7 @@
     #main-display { font-size: 16vw; font-weight: 900; text-align: center; line-height: 1.2; white-space: pre-wrap; }
     #sub-date { font-size: 5vw; font-weight: bold; margin-top: 20px; color: #795548; }
 
-    /* 右：お知らせ履歴（自由入力の通知はここでロード） */
+    /* 右：お知らせ履歴（自由入力用） */
     #right-panel { flex: 1; display: flex; flex-direction: column; }
     #history-title { font-size: 4vw; font-weight: 900; margin-bottom: 15px; padding-left: 10px; }
     
@@ -40,11 +54,9 @@
       text-align: center; font-weight: bold; transition: 0.5s; position: relative; min-height: 80px;
     }
     
-    #hist-0 { flex: 1.2; background: #fff; color: #3e2723; } 
-    #hist-1 { flex: 1.0; opacity: 0.7; }
-    #hist-2 { flex: 0.8; opacity: 0.5; }
+    #hist-text-0 { font-size: 5vw; color: #3e2723; }
+    #hist-1 { opacity: 0.7; } #hist-2 { opacity: 0.5; }
 
-    /* ミニ・ロードマーク */
     .mini-loader {
       display: none; width: 40px; height: 40px;
       border: 6px solid #d7ccc8; border-top: 6px solid #4e342e;
@@ -52,22 +64,28 @@
     }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-    /* 通知アニメーション */
+    /* フェードインアニメーション */
     .fade-in { animation: fadeInUp 0.8s ease forwards; }
     @keyframes fadeInUp {
       from { opacity: 0; transform: translateY(15px); }
       to { opacity: 1; transform: translateY(0); }
     }
 
+    /* 背景変化 */
     .gohan-mode #left-panel { background-color: #ffeb3b; border-color: #fbc02d; color: #bf360c; }
     .ofuro-mode #left-panel { background-color: #bbdefb; border-color: #64b5f6; color: #0d47a1; }
+    
     .night-mode { background: #000 !important; }
     .night-mode #main-wrapper { display: none; }
-    #localVideo { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
   </style>
 </head>
 <body>
-  <button id="start-button" onclick="userActive()">システム開始</button>
+
+  <div id="auth-screen">
+    <h2>Family Pass</h2>
+    <input type="password" id="pass-input" placeholder="****" autofocus>
+    <button id="login-btn" onclick="checkAuth()">LOGIN</button>
+  </div>
 
   <div id="main-wrapper">
     <div id="left-panel">
@@ -76,13 +94,14 @@
     </div>
     <div id="right-panel">
       <div id="history-title">通知</div>
-      <div id="hist-0" class="history-card"><div class="mini-loader" id="card-loader"></div><span id="hist-text-0">-</span></div>
+      <div id="hist-0" class="history-card">
+        <div class="mini-loader" id="card-loader"></div>
+        <span id="hist-text-0">-</span>
+      </div>
       <div id="hist-1" class="history-card"><span id="hist-text-1">-</span></div>
       <div id="hist-2" class="history-card"><span id="hist-text-2">-</span></div>
     </div>
   </div>
-
-  <video id="localVideo" autoplay playsinline muted></video>
 
   <script>
     var firebaseConfig = {
@@ -92,9 +111,25 @@
     };
     if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
     var db = firebase.database();
+
     var isReady = false;
     var lastMode = "";
     var msgHistory = ["-", "-", "-"];
+    var speechTimer = null;
+
+    // パスワードチェック (1371)
+    function checkAuth() {
+      const pass = document.getElementById('pass-input').value;
+      if(pass === "1371") { 
+        document.getElementById('auth-screen').style.display = 'none';
+        document.getElementById('main-wrapper').style.display = 'flex';
+        isReady = true;
+        // iPad音声ロック解除
+        window.speechSynthesis.speak(new SpeechSynthesisUtterance("パネルを起動しました"));
+      } else {
+        alert("パスワードが正しくありません");
+      }
+    }
 
     function updateClock() {
       var now = new Date();
@@ -107,62 +142,58 @@
     }
     setInterval(updateClock, 1000);
 
-    function adjustReading(txt) {
-      return txt.replace(/行ってきます/g, "いってきます").replace(/行ってらっしゃい/g, "いってらっしゃい").replace(/ご飯/g, "ごはん");
+    // 音声ループ機能（10秒おき）
+    function startVoiceLoop(text) {
+      stopVoiceLoop();
+      const cleanText = text.replace(/ご飯/g, "ごはん").replace(/行ってきます/g, "いってきます");
+      const speak = () => {
+        if(!isReady) return;
+        window.speechSynthesis.cancel();
+        const uttr = new SpeechSynthesisUtterance(cleanText);
+        uttr.lang = "ja-JP"; uttr.rate = 0.9;
+        window.speechSynthesis.speak(uttr);
+      };
+      speak();
+      speechTimer = setInterval(speak, 10000);
     }
 
-    function say(txt) {
-      if (!isReady || !txt || txt === "通常") return;
+    function stopVoiceLoop() {
+      if(speechTimer) { clearInterval(speechTimer); speechTimer = null; }
       window.speechSynthesis.cancel();
-      var uttr = new SpeechSynthesisUtterance(adjustReading(txt));
-      uttr.lang = "ja-JP"; uttr.rate = 0.9;
-      window.speechSynthesis.speak(uttr);
     }
 
     function setAdaptiveFontSize(element, text, baseSize) {
       let size = baseSize;
-      if (text.length > 15) size = baseSize * 0.5;
-      else if (text.length > 10) size = baseSize * 0.7;
-      else if (text.length > 5) size = baseSize * 0.85;
+      if (text.length > 10) size = baseSize * 0.7;
       element.style.fontSize = size + "vw";
       element.innerText = text;
     }
 
     db.ref('currentStatus').on('value', function(snap) {
       var data = snap.val();
-      if (!data) return;
+      if (!data || !isReady) return;
       var mode = data.mode || "通常";
       var body = document.body;
       var mainDisp = document.getElementById('main-display');
-      var loader = document.getElementById('card-loader');
-      var histText0 = document.getElementById('hist-text-0');
 
-      // 夜間モード
-      var h = new Date().getHours();
-      if (data.nightMode == 1 || (data.nightMode == 0 && (h >= 21 || h < 7))) {
-        body.classList.add('night-mode');
-      } else {
-        body.classList.remove('night-mode');
-      }
-
-      if (mode !== "通常" && mode !== lastMode) {
-        // パターンA: ごはん・お風呂（左側のみ・即時・履歴なし）
-        if (mode === "ごはん" || mode === "お風呂") {
+      if (mode !== lastMode) {
+        if (mode === "通常") {
+          stopVoiceLoop();
           body.classList.remove('gohan-mode', 'ofuro-mode');
-          if (mode === "ごはん") {
-            body.classList.add('gohan-mode');
-            mainDisp.innerText = "ごはん\nです";
-            mainDisp.style.fontSize = "11vw";
-          } else {
-            body.classList.add('ofuro-mode');
-            mainDisp.innerText = "お風呂\nです";
-            mainDisp.style.fontSize = "11vw";
-          }
-          say(mode === "ごはん" ? "ごはんです" : "お風呂です");
-          lastMode = mode;
+          updateClock();
         } 
-        // パターンB: お知らせ（右側のみ・5秒ロード・履歴あり）
+        else if (mode === "ごはん" || mode === "お風呂") {
+          body.classList.remove('gohan-mode', 'ofuro-mode');
+          body.classList.add(mode === "ごはん" ? 'gohan-mode' : 'ofuro-mode');
+          mainDisp.innerText = mode + "\nです";
+          mainDisp.style.fontSize = "11vw";
+          startVoiceLoop(mode + "です。準備してください。");
+          lastMode = mode; // 履歴に入れないためにここで更新
+        } 
         else {
+          // お知らせ：右側のみ・5秒ロード・履歴あり
+          const loader = document.getElementById('card-loader');
+          const histText0 = document.getElementById('hist-text-0');
           histText0.style.display = "none";
           loader.style.display = "block";
           
@@ -179,46 +210,13 @@
             setAdaptiveFontSize(document.getElementById('hist-text-1'), msgHistory[1], 3.5);
             setAdaptiveFontSize(document.getElementById('hist-text-2'), msgHistory[2], 2.5);
             
-            say(mode);
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance(mode.replace(/行ってきます/g, "いってきます")));
             lastMode = mode;
           }, 5000);
         }
-      } else if (mode === "通常") {
-        body.classList.remove('gohan-mode', 'ofuro-mode');
-        lastMode = "通常";
-        updateClock();
       }
     });
-
-    // カメラ機能
-    db.ref('cameraControl').on('value', function(snap) {
-      if (snap.val() === 'ON') startCamera(); else stopCamera();
-    });
-    var localStream = null;
-    function startCamera() {
-      navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
-        localStream = stream;
-        document.getElementById('localVideo').srcObject = stream;
-        setInterval(() => {
-          if (!localStream) return;
-          var canvas = document.createElement('canvas');
-          canvas.width = 320; canvas.height = 240;
-          canvas.getContext('2d').drawImage(document.getElementById('localVideo'), 0,0,320,240);
-          db.ref('cameraData').set({ image: canvas.toDataURL('image/jpeg', 0.5) });
-        }, 1000);
-      });
-    }
-    function stopCamera() {
-      if (localStream) localStream.getTracks().forEach(t => t.stop());
-      localStream = null;
-    }
-
-    function userActive() {
-      isReady = true;
-      document.getElementById('start-button').style.display = 'none';
-      var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      audioCtx.resume();
-    }
   </script>
 </body>
 </html>
