@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>家族パネル - 子機</title>
+  <title>家族パネル - 最終安定版</title>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
@@ -12,28 +12,19 @@
       transition: 0.5s; overflow: hidden; touch-action: manipulation;
     }
 
-    /* 1. 認証画面（起動時に表示） */
+    /* 認証画面 */
     #auth-screen {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: #4e342e; color: white; display: flex; flex-direction: column;
       justify-content: center; align-items: center; z-index: 20000;
     }
-    #auth-screen h2 { font-size: 5vw; margin-bottom: 30px; letter-spacing: 2px; }
-    #pass-input { 
-      font-size: 32px; padding: 15px; width: 280px; border-radius: 20px; 
-      border: 3px solid #8d6e63; text-align: center; margin-bottom: 25px;
-      outline: none; background: #fff;
-    }
-    #login-btn {
-      font-size: 24px; padding: 12px 50px; border-radius: 50px;
-      border: none; background: #d7ccc8; color: #4e342e; font-weight: bold;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.3); cursor: pointer;
-    }
+    #pass-input { font-size: 32px; padding: 15px; width: 280px; border-radius: 20px; text-align: center; margin-bottom: 25px; }
+    #login-btn { font-size: 24px; padding: 12px 50px; border-radius: 50px; background: #d7ccc8; color: #4e342e; font-weight: bold; border: none; }
 
-    /* メイン画面（認証後に表示） */
+    /* メイン画面 */
     #main-wrapper { display: none; width: 100vw; height: 100vh; padding: 25px; box-sizing: border-box; }
 
-    /* 左：メイン（時計 ＆ ごはん・お風呂専用） */
+    /* 左：メイン（時計 ＆ ごはん・お風呂） */
     #left-panel {
       flex: 1.3; background: rgba(255,255,255,0.4); border-radius: 50px;
       display: flex; flex-direction: column; justify-content: center; align-items: center;
@@ -43,47 +34,43 @@
     #main-display { font-size: 16vw; font-weight: 900; text-align: center; line-height: 1.2; white-space: pre-wrap; }
     #sub-date { font-size: 5vw; font-weight: bold; margin-top: 20px; color: #795548; }
 
-    /* 右：お知らせ履歴（自由入力用） */
+    /* 右：通知履歴 */
     #right-panel { flex: 1; display: flex; flex-direction: column; }
     #history-title { font-size: 4vw; font-weight: 900; margin-bottom: 15px; padding-left: 10px; }
     
     .history-card {
       background: rgba(255,255,255,0.8); border-radius: 30px; margin-bottom: 15px;
-      padding: 15px; display: flex; align-items: center; justify-content: center;
+      padding: 20px; display: flex; align-items: center; justify-content: center;
       box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 2px solid #d7ccc8;
-      text-align: center; font-weight: bold; transition: 0.5s; position: relative; min-height: 80px;
+      text-align: center; font-weight: bold; transition: 0.5s; position: relative; 
+      min-height: 120px; /* 枠を少し大きく調整 */
     }
     
-    #hist-text-0 { font-size: 5vw; color: #3e2723; }
+    .hist-text { width: 100%; word-break: break-all; line-height: 1.3; }
     #hist-1 { opacity: 0.7; } #hist-2 { opacity: 0.5; }
 
+    /* ローダー */
     .mini-loader {
-      display: none; width: 40px; height: 40px;
+      display: none; width: 50px; height: 50px;
       border: 6px solid #d7ccc8; border-top: 6px solid #4e342e;
       border-radius: 50%; animation: spin 1s linear infinite;
     }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-    /* フェードインアニメーション */
-    .fade-in { animation: fadeInUp 0.8s ease forwards; }
-    @keyframes fadeInUp {
-      from { opacity: 0; transform: translateY(15px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* 背景変化 */
+    /* モード別背景 */
     .gohan-mode #left-panel { background-color: #ffeb3b; border-color: #fbc02d; color: #bf360c; }
     .ofuro-mode #left-panel { background-color: #bbdefb; border-color: #64b5f6; color: #0d47a1; }
     
-    .night-mode { background: #000 !important; }
-    .night-mode #main-wrapper { display: none; }
+    /* 夜間モード */
+    .night-active { background: #000 !important; }
+    .night-active #main-wrapper { display: none; }
   </style>
 </head>
 <body>
 
   <div id="auth-screen">
     <h2>Family Pass</h2>
-    <input type="password" id="pass-input" placeholder="****" autofocus>
+    <input type="password" id="pass-input" placeholder="****">
     <button id="login-btn" onclick="checkAuth()">LOGIN</button>
   </div>
 
@@ -96,10 +83,10 @@
       <div id="history-title">通知</div>
       <div id="hist-0" class="history-card">
         <div class="mini-loader" id="card-loader"></div>
-        <span id="hist-text-0">-</span>
+        <span id="hist-text-0" class="hist-text">-</span>
       </div>
-      <div id="hist-1" class="history-card"><span id="hist-text-1">-</span></div>
-      <div id="hist-2" class="history-card"><span id="hist-text-2">-</span></div>
+      <div id="hist-1" class="history-card"><span id="hist-text-1" class="hist-text">-</span></div>
+      <div id="hist-2" class="history-card"><span id="hist-text-2" class="hist-text">-</span></div>
     </div>
   </div>
 
@@ -109,43 +96,38 @@
       databaseURL: "https://info-pane-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "info-pane"
     };
-    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+    firebase.initializeApp(firebaseConfig);
     var db = firebase.database();
 
     var isReady = false;
-    var lastMode = "";
+    var currentMode = "通常";
     var msgHistory = ["-", "-", "-"];
     var speechTimer = null;
 
-    // パスワードチェック (1371)
     function checkAuth() {
-      const pass = document.getElementById('pass-input').value;
-      if(pass === "1371") { 
+      if(document.getElementById('pass-input').value === "1371") { 
         document.getElementById('auth-screen').style.display = 'none';
         document.getElementById('main-wrapper').style.display = 'flex';
         isReady = true;
-        // iPad音声ロック解除
-        window.speechSynthesis.speak(new SpeechSynthesisUtterance("パネルを起動しました"));
-      } else {
-        alert("パスワードが正しくありません");
-      }
+        window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+      } else { alert("パスワードエラー"); }
     }
 
     function updateClock() {
+      if (currentMode !== "通常") return; 
       var now = new Date();
       var dayList = ["日", "月", "火", "水", "木", "金", "土"];
       document.getElementById('sub-date').innerText = (now.getMonth() + 1) + "月" + now.getDate() + "日 (" + dayList[now.getDay()] + ")";
-      if (lastMode !== "ごはん" && lastMode !== "お風呂") {
-        document.getElementById('main-display').innerText = ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2);
-        document.getElementById('main-display').style.fontSize = "16vw";
-      }
+      var timeStr = ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2);
+      var disp = document.getElementById('main-display');
+      disp.innerText = timeStr;
+      disp.style.fontSize = "16vw";
     }
     setInterval(updateClock, 1000);
 
-    // 音声ループ機能（10秒おき）
     function startVoiceLoop(text) {
       stopVoiceLoop();
-      const cleanText = text.replace(/ご飯/g, "ごはん").replace(/行ってきます/g, "いってきます");
+      const cleanText = text.replace(/ご飯/g, "ごはん");
       const speak = () => {
         if(!isReady) return;
         window.speechSynthesis.cancel();
@@ -162,57 +144,69 @@
       window.speechSynthesis.cancel();
     }
 
-    function setAdaptiveFontSize(element, text, baseSize) {
+    function setAdaptiveFontSize(id, text, baseSize) {
+      const el = document.getElementById(id);
       let size = baseSize;
-      if (text.length > 10) size = baseSize * 0.7;
-      element.style.fontSize = size + "vw";
-      element.innerText = text;
+      if (text.length > 15) size = baseSize * 0.5;
+      else if (text.length > 8) size = baseSize * 0.75;
+      el.style.fontSize = size + "vw";
+      el.innerText = text;
     }
 
     db.ref('currentStatus').on('value', function(snap) {
       var data = snap.val();
       if (!data || !isReady) return;
       var mode = data.mode || "通常";
-      var body = document.body;
-      var mainDisp = document.getElementById('main-display');
 
-      if (mode !== lastMode) {
+      // 1. スーパー夜間モード処理 (0:自動, 1:強制夜, 2:強制昼)
+      var h = new Date().getHours();
+      var isNight = false;
+      if (data.nightMode == 1) isNight = true;
+      else if (data.nightMode == 2) isNight = false;
+      else if (h >= 21 || h < 7) isNight = true;
+
+      if (isNight) document.body.classList.add('night-active');
+      else document.body.classList.remove('night-active');
+
+      // 2. 表示ロジック
+      if (mode !== currentMode) {
         if (mode === "通常") {
+          currentMode = "通常";
           stopVoiceLoop();
-          body.classList.remove('gohan-mode', 'ofuro-mode');
+          document.body.classList.remove('gohan-mode', 'ofuro-mode');
           updateClock();
         } 
         else if (mode === "ごはん" || mode === "お風呂") {
-          body.classList.remove('gohan-mode', 'ofuro-mode');
-          body.classList.add(mode === "ごはん" ? 'gohan-mode' : 'ofuro-mode');
-          mainDisp.innerText = mode + "\nです";
-          mainDisp.style.fontSize = "11vw";
+          currentMode = mode;
+          document.body.classList.remove('gohan-mode', 'ofuro-mode');
+          document.body.classList.add(mode === "ごはん" ? 'gohan-mode' : 'ofuro-mode');
+          var disp = document.getElementById('main-display');
+          disp.innerText = mode + "\nです";
+          disp.style.fontSize = "11vw";
           startVoiceLoop(mode + "です。準備してください。");
-          lastMode = mode; // 履歴に入れないためにここで更新
         } 
         else {
-          // お知らせ：右側のみ・5秒ロード・履歴あり
+          // お知らせ（右側ロード）
+          // お知らせ時は左側の「ごはん・お風呂」状態を壊さない
           const loader = document.getElementById('card-loader');
-          const histText0 = document.getElementById('hist-text-0');
-          histText0.style.display = "none";
+          const txt0 = document.getElementById('hist-text-0');
+          txt0.style.display = "none";
           loader.style.display = "block";
-          
+
           setTimeout(function() {
             loader.style.display = "none";
-            histText0.style.display = "inline";
-            histText0.classList.remove("fade-in");
-            void histText0.offsetWidth;
-            histText0.classList.add("fade-in");
-
+            txt0.style.display = "inline";
             msgHistory.unshift(mode);
             msgHistory = msgHistory.slice(0, 3);
-            setAdaptiveFontSize(document.getElementById('hist-text-0'), msgHistory[0], 5);
-            setAdaptiveFontSize(document.getElementById('hist-text-1'), msgHistory[1], 3.5);
-            setAdaptiveFontSize(document.getElementById('hist-text-2'), msgHistory[2], 2.5);
-            
-            window.speechSynthesis.cancel();
-            window.speechSynthesis.speak(new SpeechSynthesisUtterance(mode.replace(/行ってきます/g, "いってきます")));
-            lastMode = mode;
+            setAdaptiveFontSize('hist-text-0', msgHistory[0], 5);
+            setAdaptiveFontSize('hist-text-1', msgHistory[1], 3.5);
+            setAdaptiveFontSize('hist-text-2', msgHistory[2], 2.5);
+
+            // お知らせ音声は流さない（ごはん・お風呂ループを優先するため）
+            // もし通常時なら1回だけ流す
+            if (currentMode === "通常") {
+              window.speechSynthesis.speak(new SpeechSynthesisUtterance(mode.replace(/行ってきます/g, "いってきます")));
+            }
           }, 5000);
         }
       }
