@@ -2,63 +2,75 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>家族パネル・親機</title>
+  <title>家族パネル - 最終統合版</title>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
-    body { margin: 0; background-color: #f0f0f0; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 10px; }
-    .card { width: 100%; max-width: 400px; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; box-sizing: border-box; }
-    h2 { font-size: 14px; color: #666; margin: 0 0 10px 0; }
-    .btn { width: 100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; color: white; margin-bottom: 8px; cursor: pointer; transition: 0.1s; }
-    .btn:active { transform: translateY(2px); opacity: 0.8; }
-    .btn-send { background: #444; }
-    .btn-gohan { background: #ce0000; width: 48%; }
-    .btn-ofuro { background: #2196F3; width: 48%; }
-    .btn-cam-on { background: #28a745; }
-    .btn-cam-off { background: #dc3545; }
-    .btn-night { background: #4b0082; font-size: 12px; }
-    .btn-day { background: #ff8c00; font-size: 12px; }
-    #monitor-container { width: 100%; height: 240px; background: #000; border-radius: 10px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
-    #monitor { width: 100%; height: 100%; object-fit: contain; }
-    #monitor-placeholder { position: absolute; color: white; font-size: 14px; }
-    .flex { display: flex; justify-content: space-between; gap: 5px; }
+    body { 
+      margin: 0; background-color: #eaddca; color: #3e2723; 
+      font-family: "Hiragino Kaku Gothic ProN", sans-serif; 
+      transition: 0.5s; overflow: hidden; touch-action: manipulation;
+    }
+
+    /* 認証画面 */
+    #auth-screen {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #4e342e; color: white; display: flex; flex-direction: column;
+      justify-content: center; align-items: center; z-index: 20000;
+    }
+    #pass-input { font-size: 32px; padding: 15px; width: 280px; border-radius: 20px; text-align: center; border: none; }
+    #login-btn { font-size: 24px; padding: 12px 50px; border-radius: 50px; background: #d7ccc8; color: #4e342e; margin-top: 20px; border:none; font-weight: bold; }
+
+    /* メイン画面全体 */
+    #main-wrapper { display: none; width: 100vw; height: 100vh; padding: 25px; box-sizing: border-box; }
+
+    /* 左パネル（時計・ごはん・お風呂） */
+    #left-panel { flex: 1.3; background: rgba(255,255,255,0.4); border-radius: 50px; display: flex; flex-direction: column; justify-content: center; align-items: center; margin-right: 25px; border: 2px solid rgba(255,255,255,0.5); padding: 20px; transition: 0.5s; }
+    #main-display { font-size: 16vw; font-weight: 900; text-align: center; white-space: pre-wrap; line-height: 1.2; }
+    #sub-date { font-size: 5vw; font-weight: bold; margin-top: 20px; color: #795548; }
+
+    /* 右パネル（お知らせ履歴） */
+    #right-panel { flex: 1; display: flex; flex-direction: column; }
+    .history-card { background: rgba(255,255,255,0.8); border-radius: 30px; margin-bottom: 15px; padding: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 2px solid #d7ccc8; min-height: 120px; transition: 0.5s; position: relative; }
+    .hist-text { width: 100%; word-break: break-all; font-weight: bold; text-align: center; line-height: 1.3; }
+    #hist-1 { opacity: 0.7; } #hist-2 { opacity: 0.5; }
+
+    /* ローダー（お知らせ用） */
+    .mini-loader { display: none; width: 50px; height: 50px; border: 6px solid #d7ccc8; border-top: 6px solid #4e342e; border-radius: 50%; animation: spin 1s linear infinite; position: absolute; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    /* モード別背景カラー */
+    .gohan-mode #left-panel { background-color: #ffeb3b !important; color: #bf360c !important; border-color: #fbc02d; }
+    .ofuro-mode #left-panel { background-color: #bbdefb !important; color: #0d47a1 !important; border-color: #64b5f6; }
+
+    /* ★スーパー夜間モード（漆黒）★ */
+    .night-active { background-color: #000 !important; }
+    .night-active #main-wrapper { display: none !important; }
+    .night-active #auth-screen { background-color: #000 !important; border: none !important; }
+    .night-active #auth-screen * { display: none !important; }
   </style>
 </head>
 <body>
 
-  <div class="card">
-    <h2>カメラモニター: <span id="status-text">-</span></h2>
-    <div id="monitor-container">
-      <div id="monitor-placeholder">映像停止中</div>
-      <img id="monitor" src="" style="display:none;">
-    </div>
-    <div class="flex" style="margin-top:10px;">
-      <button class="btn btn-cam-on" style="width:48%" onclick="camControl('ON')">カメラ起動</button>
-      <button class="btn btn-cam-off" style="width:48%" onclick="camControl('OFF')">シャットダウン</button>
-    </div>
+  <div id="auth-screen">
+    <h2 style="font-size: 5vw; margin-bottom: 20px;">Family Pass</h2>
+    <input type="password" id="pass-input" placeholder="****" autofocus>
+    <button id="login-btn" onclick="checkAuth()">LOGIN</button>
   </div>
 
-  <div class="card">
-    <h2>おしらせ送信</h2>
-    <input type="text" id="custom-message" placeholder="メッセージを入力" style="width:100%; padding:12px; margin-bottom:10px; border:1px solid #ccc; border-radius:8px; box-sizing:border-box; font-size:16px;">
-    <button class="btn btn-send" onclick="sendCustom()">送信</button>
-  </div>
-
-  <div class="card">
-    <div class="flex">
-      <button class="btn btn-gohan" onclick="updateDb('ごはん')">ごはん</button>
-      <button class="btn btn-ofuro" onclick="updateDb('お風呂')">お風呂</button>
+  <div id="main-wrapper">
+    <div id="left-panel">
+      <div id="main-display">00:00</div>
+      <div id="sub-date">--月--日 (曜)</div>
     </div>
-    <button class="btn" style="background:#888" onclick="updateDb('通常')">時計に戻す</button>
-  </div>
-
-  <div class="card">
-    <h2>夜間モード設定</h2>
-    <div class="flex">
-      <button class="btn btn-night" style="width:32%" onclick="setNight(1)">強制夜</button>
-      <button class="btn btn-day" style="width:32%" onclick="setNight(2)">強制昼</button>
-      <button class="btn" style="width:32%; background:#888; font-size:12px;" onclick="setNight(0)">自動</button>
+    <div id="right-panel">
+      <div id="history-title" style="font-size: 4vw; font-weight: 900; margin-bottom: 15px; padding-left: 10px;">通知</div>
+      <div id="hist-0" class="history-card">
+        <div class="mini-loader" id="card-loader"></div>
+        <span id="hist-text-0" class="hist-text">-</span>
+      </div>
+      <div id="hist-1" class="history-card"><span id="hist-text-1" class="hist-text">-</span></div>
+      <div id="hist-2" class="history-card"><span id="hist-text-2" class="hist-text">-</span></div>
     </div>
   </div>
 
@@ -68,34 +80,104 @@
       databaseURL: "https://info-pane-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "info-pane"
     };
-    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+    firebase.initializeApp(firebaseConfig);
     var db = firebase.database();
 
-    function updateDb(m) { db.ref('currentStatus').update({ mode: m, date: "" }); }
-    function camControl(c) { db.ref('cameraControl').set(c); }
-    function setNight(v) { db.ref('currentStatus').update({ nightMode: v }); }
+    var isReady = false;
+    var currentMainMode = "通常"; // 左側の状態管理
+    var speechTimer = null;
+    var msgHistory = ["-", "-", "-"];
 
-    function sendCustom() {
-      var txt = document.getElementById('custom-message').value;
-      if(!txt) return;
+    function checkAuth() {
+      if(document.getElementById('pass-input').value === "1371") { 
+        document.getElementById('auth-screen').style.display = 'none';
+        document.getElementById('main-wrapper').style.display = 'flex';
+        isReady = true;
+        window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+      } else { alert("PASS ERROR"); }
+    }
+
+    function updateClock() {
+      if (currentMainMode !== "通常" || document.body.classList.contains('night-active')) return; 
       var now = new Date();
-      var dStr = (now.getMonth()+1)+"/"+now.getDate()+" "+now.getHours()+":"+("0"+now.getMinutes()).slice(-2);
-      db.ref('currentStatus').update({ mode: txt, date: dStr });
-      document.getElementById('custom-message').value = "";
+      var dayList = ["日", "月", "火", "水", "木", "金", "土"];
+      document.getElementById('sub-date').innerText = (now.getMonth() + 1) + "月" + now.getDate() + "日 (" + dayList[now.getDay()] + ")";
+      var disp = document.getElementById('main-display');
+      disp.innerText = ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2);
+      disp.style.fontSize = "16vw";
+    }
+    setInterval(updateClock, 1000);
+
+    function stopVoiceLoop() { if(speechTimer) { clearInterval(speechTimer); speechTimer = null; } window.speechSynthesis.cancel(); }
+
+    function startVoiceLoop(text) {
+      stopVoiceLoop();
+      const cleanText = text.replace(/ご飯/g, "ごはん");
+      const speak = () => { if(!isReady) return; window.speechSynthesis.cancel(); const uttr = new SpeechSynthesisUtterance(cleanText); uttr.lang = "ja-JP"; uttr.rate = 0.9; window.speechSynthesis.speak(uttr); };
+      speak(); speechTimer = setInterval(speak, 10000);
     }
 
     db.ref('currentStatus').on('value', function(snap) {
-      var d = snap.val(); if(d) document.getElementById('status-text').innerText = d.mode;
-    });
+      var data = snap.val();
+      if (!data || !isReady) return;
 
-    db.ref('cameraData').on('value', function(snap) {
-      var d = snap.val();
-      var img = document.getElementById('monitor');
-      var ph = document.getElementById('monitor-placeholder');
-      if (d && d.image && d.image !== "") {
-        img.src = d.image; img.style.display = 'block'; ph.style.display = 'none';
+      // 1. スーパー夜間モード判定 (0:自動, 1:強制夜, 2:強制昼)
+      var h = new Date().getHours();
+      var shouldBeNight = (data.nightMode == 1) || (data.nightMode == 0 && (h >= 21 || h < 7));
+      if (data.nightMode == 2) shouldBeNight = false;
+
+      if (shouldBeNight) {
+        document.body.classList.add('night-active');
+        stopVoiceLoop();
+        return; // 夜間はこれ以降の処理を停止
       } else {
-        img.src = ""; img.style.display = 'none'; ph.style.display = 'block';
+        document.body.classList.remove('night-active');
+      }
+
+      var mode = data.mode || "通常";
+
+      // 2. メイン表示切り替え（ごはん・お風呂・通常）
+      if (mode === "通常" || mode === "ごはん" || mode === "お風呂") {
+        if (mode !== currentMainMode) {
+          currentMainMode = mode;
+          document.body.classList.remove('gohan-mode', 'ofuro-mode');
+          if (mode === "通常") {
+            stopVoiceLoop();
+            updateClock();
+          } else {
+            document.body.classList.add(mode === "ごはん" ? 'gohan-mode' : 'ofuro-mode');
+            const disp = document.getElementById('main-display');
+            disp.innerText = mode + "\nです";
+            disp.style.fontSize = "11vw";
+            startVoiceLoop(mode + "です。準備してください。");
+          }
+        }
+      } 
+      // 3. 通知処理（お知らせ）
+      else if (mode !== "通常" && !msgHistory.includes(mode)) {
+        const loader = document.getElementById('card-loader');
+        const txt0 = document.getElementById('hist-text-0');
+        txt0.style.display = "none";
+        loader.style.display = "block";
+
+        setTimeout(function() {
+          loader.style.display = "none";
+          txt0.style.display = "inline";
+          msgHistory.unshift(mode);
+          msgHistory = msgHistory.slice(0, 3);
+          for(let i=0; i<3; i++) {
+            let el = document.getElementById('hist-text-'+i);
+            el.innerText = msgHistory[i];
+            let size = (i==0 ? 5 : i==1 ? 3.5 : 2.5);
+            if(msgHistory[i].length > 10) size *= 0.8;
+            el.style.fontSize = size + "vw";
+          }
+          // 通常時（時計表示中）のみお知らせを読み上げる
+          if (currentMainMode === "通常") {
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance(mode.replace(/行ってきます/g, "いってきます")));
+          }
+        }, 5000);
       }
     });
   </script>
